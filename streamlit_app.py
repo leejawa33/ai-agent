@@ -13,6 +13,7 @@ st.title("🧠 ReAct Agent Demo")
 
 agent = ReActAgent(
     llm=MockLLM(),
+    # llm=OpenAILLM(),
     tools={
         "calculator": CalculatorTool(),
         "current_time": CurrentTimeTool(),
