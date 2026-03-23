@@ -1,4 +1,4 @@
-## ai-agent 데모
+## ReAct Agent Demo 데모
 
 ReAct Loop 구조 구현 목적
 - OpenAi key를 제거 했기에 mock 으로 대체 상태 
