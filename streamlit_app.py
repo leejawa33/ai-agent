@@ -1,7 +1,7 @@
 import streamlit as st
 from react_agent import ReActAgent
-# from llm import OpenAILLM
-from mock_llm import MockLLM
+from llm import OpenAILLM
+# from mock_llm import MockLLM
 
 from prompt import SYSTEM_PROMPT
 from tools.caculator_tool import CalculatorTool
@@ -12,8 +12,8 @@ st.set_page_config(page_title="ReAct Agent Demo", layout="wide")
 st.title("🧠 ReAct Agent Demo")
 
 agent = ReActAgent(
-    llm=MockLLM(),
-    # llm=OpenAILLM(),
+    llm=OpenAILLM(),
+    # llm=MockLLM(),
     tools={
         "calculator": CalculatorTool(),
         "current_time": CurrentTimeTool(),
