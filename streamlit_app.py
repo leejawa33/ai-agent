@@ -23,7 +23,7 @@ agent = ReActAgent(
 )
 
 mode = st.radio("스트리밍 모드", ["스텝 스트리밍", "토큰 스트리밍"], horizontal=True)
-st.caption("스텝 스트리밍: 각 스텝 완료 시 표시 / 토큰 스트리밍: LLM이 글자를 생성하는 것을 실시간 표시")
+st.caption("스텝 스트리밍: 각 스텝 완료 시 표시 / 토큰 스트리밍: Function Call 인자가 생성되는 것을 실시간 표시")
 
 user_input = st.text_input("질문을 입력하세요")
 
@@ -40,7 +40,8 @@ if st.button("실행") and user_input:
                     is_latest = (i == len(steps_done) - 1)
                     label = f"Step {s['step']} — {'최종 답변' if s['action'] == 'final' else 'tool: ' + str(s['tool'])}"
                     with st.expander(label, expanded=is_latest):
-                        st.write("**Thought:**", s["thought"])
+                        if s["thought"]:
+                            st.write("**Thought:**", s["thought"])
                         if s["tool"]:
                             st.write("**Tool:**", s["tool"])
                             st.write("**Observation:**", s["observation"])
@@ -58,10 +59,10 @@ if st.button("실행") and user_input:
         for event_type, data in agent.run_token_stream(user_input):
             if event_type == "step_start":
                 current_tokens = ""
-                stream_header.markdown(f"**⏳ Step {data} 생성 중...**")
+                stream_header.markdown(f"**⏳ Step {data} — Function Call 생성 중...**")
             elif event_type == "token":
                 current_tokens += data
-                stream_box.code(current_tokens)
+                stream_box.code(current_tokens, language="json")
             elif event_type == "step_done":
                 stream_header.empty()
                 stream_box.empty()
@@ -70,7 +71,8 @@ if st.button("실행") and user_input:
                     for s in steps_done:
                         label = f"Step {s['step']} — {'최종 답변' if s['action'] == 'final' else 'tool: ' + str(s['tool'])}"
                         with st.expander(label, expanded=False):
-                            st.write("**Thought:**", s["thought"])
+                            if s["thought"]:
+                                st.write("**Thought:**", s["thought"])
                             if s["tool"]:
                                 st.write("**Tool:**", s["tool"])
                                 st.write("**Observation:**", s["observation"])

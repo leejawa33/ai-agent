@@ -2,7 +2,20 @@ import requests
 
 class WikipediaSearchTool:
     name = "wikipedia_search"
-    description = "위키피디아에서 키워드를 검색해 요약을 반환한다."
+    schema = {
+        "type": "function",
+        "function": {
+            "name": "wikipedia_search",
+            "description": "위키피디아에서 키워드를 검색해 요약을 반환합니다",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "검색할 키워드 (영문 권장, 예: Python_programming_language)"}
+                },
+                "required": ["query"]
+            }
+        }
+    }
 
     def run(self, tool_input: str) -> str:
         if not tool_input:
@@ -19,7 +32,6 @@ class WikipediaSearchTool:
             if not extract:
                 return "ERROR: 요약 정보를 가져오지 못했습니다."
 
-            # 너무 길면 잘라서 Observation으로 넘김
             return extract[:500]
 
         except Exception as e:

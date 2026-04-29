@@ -1,20 +1,31 @@
 class MockLLM:
-    def call(self, messages):
-        last = messages[-1]["content"]
+    def call(self, messages, tools=None) -> dict:
+        last = messages[-1].get("content") or ""
 
         if "계산" in last:
-            return """
-Thought: 계산이 필요하다
-Action: tool
-ToolName: calculator
-Input: 12*3+4
-"""
-        return """
-Thought: 충분한 정보가 모였다
-Action: final
-Output: Mock LLM 응답입니다.
-"""
+            return {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{
+                    "id": "mock_call_1",
+                    "type": "function",
+                    "function": {"name": "calculator", "arguments": '{"expression": "12*3+4"}'}
+                }]
+            }
 
-    def stream_call(self, messages):
-        full = self.call(messages)
-        yield full, full
+        return {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{
+                "id": "mock_call_final",
+                "type": "function",
+                "function": {"name": "final_answer", "arguments": '{"answer": "Mock LLM 응답입니다."}'}
+            }]
+        }
+
+    def stream_call(self, messages, tools=None):
+        result = self.call(messages, tools)
+        if result.get("tool_calls"):
+            args = result["tool_calls"][0]["function"]["arguments"]
+            yield ("tool_token", args)
+        yield ("done", result)

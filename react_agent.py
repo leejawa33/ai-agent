@@ -1,55 +1,66 @@
-import re
+import json
+
+FINAL_ANSWER_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "final_answer",
+        "description": "충분한 정보가 모였을 때 최종 답변을 제출합니다",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "answer": {"type": "string", "description": "최종 답변"}
+            },
+            "required": ["answer"]
+        }
+    }
+}
 
 class ReActAgent:
     def __init__(self, llm, tools: dict, system_prompt: str):
         self.llm = llm
         self.tools = tools
         self.system_prompt = system_prompt
+        self.tools_schema = [t.schema for t in tools.values()] + [FINAL_ANSWER_SCHEMA]
 
     def run(self, user_input: str, max_steps: int = 5):
         messages = self._init_messages(user_input)
         steps = []
         for step in range(1, max_steps + 1):
-            response = self.llm.call(messages)
-            step_log = self._process_response(step, response)
+            message = self.llm.call(messages, self.tools_schema)
+            step_log = self._process_message(step, message)
             steps.append(step_log)
             if step_log["action"] == "final":
                 return step_log["final"], steps
-            self._append_observation(messages, response, step_log["observation"])
+            self._append_tool_result(messages, message, step_log["observation"], step_log["tool_call_id"])
         raise Exception("Max steps exceeded")
 
     def run_step_stream(self, user_input: str, max_steps: int = 5):
-        """각 스텝이 완료될 때마다 step_log를 yield"""
         messages = self._init_messages(user_input)
         for step in range(1, max_steps + 1):
-            response = self.llm.call(messages)
-            step_log = self._process_response(step, response)
+            message = self.llm.call(messages, self.tools_schema)
+            step_log = self._process_message(step, message)
             yield step_log
             if step_log["action"] == "final":
                 return
-            self._append_observation(messages, response, step_log["observation"])
+            self._append_tool_result(messages, message, step_log["observation"], step_log["tool_call_id"])
         raise Exception("Max steps exceeded")
 
     def run_token_stream(self, user_input: str, max_steps: int = 5):
-        """토큰 단위 스트리밍. 이벤트 튜플을 yield:
-        ("step_start", step_num)
-        ("token", token_str)
-        ("step_done", step_log)
-        ("final", answer_str)
-        """
         messages = self._init_messages(user_input)
         for step in range(1, max_steps + 1):
             yield ("step_start", step)
-            full_response = ""
-            for token, full_text in self.llm.stream_call(messages):
-                yield ("token", token)
-                full_response = full_text
-            step_log = self._process_response(step, full_response)
+            message = None
+            for event_type, data in self.llm.stream_call(messages, self.tools_schema):
+                if event_type in ("token", "tool_token"):
+                    yield ("token", data)
+                elif event_type == "done":
+                    message = data
+            step_log = self._process_message(step, message)
             yield ("step_done", step_log)
             if step_log["action"] == "final":
                 yield ("final", step_log["final"])
                 return
-            self._append_observation(messages, full_response, step_log["observation"])
+            self._append_tool_result(messages, message, step_log["observation"], step_log["tool_call_id"])
         raise Exception("Max steps exceeded")
 
     def _init_messages(self, user_input: str):
@@ -58,33 +69,42 @@ class ReActAgent:
             {"role": "user", "content": user_input},
         ]
 
-    def _process_response(self, step: int, response: str) -> dict:
-        thought = self._parse("Thought", response)
-        action = self._parse("Action", response)
+    def _process_message(self, step: int, message: dict) -> dict:
         step_log = {
             "step": step,
-            "thought": thought,
-            "action": action,
+            "thought": message.get("content") or "",
+            "action": None,
             "tool": None,
+            "tool_call_id": None,
             "observation": None,
             "final": None,
         }
-        if action == "final":
-            step_log["final"] = self._parse("Output", response)
-            return step_log
-        tool_name = self._parse("ToolName", response)
-        tool_input = self._parse("Input", response)
-        tool = self.tools.get(tool_name)
-        step_log["tool"] = tool_name
-        step_log["observation"] = tool.run(tool_input) if tool else "Tool not found"
+        tool_calls = message.get("tool_calls")
+        if tool_calls:
+            tc = tool_calls[0]
+            tool_name = tc["function"]["name"]
+            args = json.loads(tc["function"]["arguments"]) if tc["function"]["arguments"] else {}
+
+            if tool_name == "final_answer":
+                step_log["action"] = "final"
+                step_log["final"] = args.get("answer", "")
+                return step_log
+
+            step_log["action"] = "tool"
+            step_log["tool"] = tool_name
+            step_log["tool_call_id"] = tc["id"]
+            tool_input = next(iter(args.values()), "") if args else ""
+            tool = self.tools.get(tool_name)
+            step_log["observation"] = tool.run(str(tool_input)) if tool else "Tool not found"
+        else:
+            step_log["action"] = "final"
+            step_log["final"] = message.get("content") or ""
         return step_log
 
-    def _append_observation(self, messages, response, observation):
-        messages.append({"role": "assistant", "content": response})
-        messages.append({"role": "user", "content": f"Observation: {observation}"})
-
-    def _parse(self, key: str, text: str) -> str:
-        match = re.search(rf"{key}:\s*(.*)", text)
-        if not match:
-            raise Exception(f"Missing {key}")
-        return match.group(1).strip()
+    def _append_tool_result(self, messages, message: dict, observation: str, tool_call_id: str):
+        messages.append(message)
+        messages.append({
+            "role": "tool",
+            "tool_call_id": tool_call_id,
+            "content": str(observation),
+        })
