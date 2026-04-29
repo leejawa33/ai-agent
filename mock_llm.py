@@ -14,3 +14,7 @@ Thought: 충분한 정보가 모였다
 Action: final
 Output: Mock LLM 응답입니다.
 """
+
+    def stream_call(self, messages):
+        full = self.call(messages)
+        yield full, full
