@@ -1,4 +1,5 @@
 import requests
+from urllib.parse import quote
 
 class WikipediaSearchTool:
     name = "wikipedia_search"
@@ -21,7 +22,7 @@ class WikipediaSearchTool:
         if not tool_input:
             return "ERROR: 검색어가 필요합니다."
 
-        url = "https://en.wikipedia.org/api/rest_v1/page/summary/" + tool_input
+        url = "https://en.wikipedia.org/api/rest_v1/page/summary/" + quote(tool_input)
         try:
             res = requests.get(url, timeout=5)
             if res.status_code != 200:

@@ -1,29 +1,47 @@
 import os
+import json
+import logging
 from dotenv import load_dotenv
 from openai import OpenAI
 
 load_dotenv()
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler("agent.log", encoding="utf-8"),
+        logging.StreamHandler(),
+    ]
+)
+logger = logging.getLogger(__name__)
 
 class OpenAILLM:
     def __init__(self):
         self.client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
     def call(self, messages, tools) -> dict:
+        logger.debug("▶ REQUEST\n%s", json.dumps(messages, ensure_ascii=False, indent=2))
         res = self.client.chat.completions.create(
             model="gpt-4o-mini",
             messages=messages,
             tools=tools,
             temperature=0,
+            parallel_tool_calls=False,
         )
-        return self._to_dict(res.choices[0].message)
+        result = self._to_dict(res.choices[0].message)
+        logger.debug("◀ RESPONSE\n%s", json.dumps(result, ensure_ascii=False, indent=2))
+        return result
 
     def stream_call(self, messages, tools):
+        logger.debug("▶ REQUEST (stream)\n%s", json.dumps(messages, ensure_ascii=False, indent=2))
         stream = self.client.chat.completions.create(
             model="gpt-4o-mini",
             messages=messages,
             tools=tools,
             temperature=0,
             stream=True,
+            parallel_tool_calls=False,
         )
         full_content = ""
         tool_calls_accum = {}
@@ -58,9 +76,12 @@ class OpenAILLM:
                 }
                 for v in tool_calls_accum.values()
             ]
-            yield ("done", {"role": "assistant", "content": full_content or None, "tool_calls": tool_calls})
+            result = {"role": "assistant", "content": full_content or None, "tool_calls": tool_calls}
         else:
-            yield ("done", {"role": "assistant", "content": full_content, "tool_calls": None})
+            result = {"role": "assistant", "content": full_content, "tool_calls": None}
+
+        logger.debug("◀ RESPONSE (stream)\n%s", json.dumps(result, ensure_ascii=False, indent=2))
+        yield ("done", result)
 
     def _to_dict(self, message) -> dict:
         d = {"role": message.role, "content": message.content}
