@@ -63,6 +63,47 @@ class ReActAgent:
             self._append_tool_result(messages, message, step_log["observation"], step_log["tool_call_id"])
         raise Exception("Max steps exceeded")
 
+    async def arun(self, user_input: str, max_steps: int = 5):
+        messages = self._init_messages(user_input)
+        steps = []
+        for step in range(1, max_steps + 1):
+            message = await self.llm.acall(messages, self.tools_schema)
+            step_log = self._process_message(step, message)
+            steps.append(step_log)
+            if step_log["action"] == "final":
+                return step_log["final"], steps
+            self._append_tool_result(messages, message, step_log["observation"], step_log["tool_call_id"])
+        raise Exception("Max steps exceeded")
+
+    async def arun_step_stream(self, user_input: str, max_steps: int = 5):
+        messages = self._init_messages(user_input)
+        for step in range(1, max_steps + 1):
+            message = await self.llm.acall(messages, self.tools_schema)
+            step_log = self._process_message(step, message)
+            yield step_log
+            if step_log["action"] == "final":
+                return
+            self._append_tool_result(messages, message, step_log["observation"], step_log["tool_call_id"])
+        raise Exception("Max steps exceeded")
+
+    async def arun_token_stream(self, user_input: str, max_steps: int = 5):
+        messages = self._init_messages(user_input)
+        for step in range(1, max_steps + 1):
+            yield ("step_start", step)
+            message = None
+            async for event_type, data in self.llm.astream_call(messages, self.tools_schema):
+                if event_type in ("token", "tool_token"):
+                    yield ("token", data)
+                elif event_type == "done":
+                    message = data
+            step_log = self._process_message(step, message)
+            yield ("step_done", step_log)
+            if step_log["action"] == "final":
+                yield ("final", step_log["final"])
+                return
+            self._append_tool_result(messages, message, step_log["observation"], step_log["tool_call_id"])
+        raise Exception("Max steps exceeded")
+
     def _init_messages(self, user_input: str):
         return [
             {"role": "system", "content": self.system_prompt},
