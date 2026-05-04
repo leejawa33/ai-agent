@@ -24,10 +24,25 @@ USE_MOCK_LLM=1 .venv/bin/uvicorn main:app --port 8765
 
 ### 호출 예시
 ```bash
+# 일반 JSON 응답
 curl -X POST http://127.0.0.1:8765/chat \
   -H "Content-Type: application/json" \
   -d '{"message":"12 곱하기 3 더하기 4는?","max_steps":5}'
+
+# SSE 스트리밍 - 스텝 모드 (기본)
+curl -N -X POST "http://127.0.0.1:8765/chat/stream?mode=step" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"계산해줘"}'
+
+# SSE 스트리밍 - 토큰 모드
+curl -N -X POST "http://127.0.0.1:8765/chat/stream?mode=token" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"계산해줘"}'
 ```
+
+**SSE 이벤트 종류**:
+- `step` 모드: `step` (각 스텝) → `final` → `done` / 실패 시 `error` → `done`
+- `token` 모드: `step_start` → `token` (토큰 단위) → `step_done` → `final` → `done`
 
 ### 테스트 실행 (로컬 전용)
 ```bash
@@ -91,7 +106,7 @@ curl -X POST http://127.0.0.1:8765/chat \
 |---|---|---|
 | 1.1 | OpenAILLM/MockLLM/ReActAgent에 async 메서드 추가, `main.py`에 `POST /chat` JSON 엔드포인트 | ✅ 완료 (2026-05-03) |
 | 1.1.t | Phase 1.1 회귀 테스트 셋 (pytest + pytest-asyncio + TestClient + MockLLM, 11 tests) | ✅ 완료 (2026-05-03) |
-| 1.2 | SSE 스트리밍 (`GET /chat/stream`, 스텝/토큰 모드 쿼리 파라미터) | ⏳ 대기 |
+| 1.2 | SSE 스트리밍 (`POST /chat/stream?mode=step\|token`, 명명 이벤트, error/done 처리) | ✅ 완료 (2026-05-05) |
 | 1.3 | 영속화 (sqlite + sqlalchemy async, `users`/`conversations`/`messages` 최소 스키마) — postgres/alembic까진 안 감 | ⏳ 대기 |
 | 1.4 | Streamlit을 FastAPI 클라이언트로 전환 (httpx 호출), 동기 잔재 정리 | ⏳ 대기 |
 | 1.5 | **Tool 등록 자동화** — `@tool` 데코레이터 + Pydantic args 모델로 schema 자동 생성, `tools/` 폴더 자동 디스커버리 (수동 dict 등록 제거) | ⏳ 대기 |
