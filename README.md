@@ -29,6 +29,14 @@ curl -X POST http://127.0.0.1:8765/chat \
   -d '{"message":"12 곱하기 3 더하기 4는?","max_steps":5}'
 ```
 
+### 테스트 실행 (로컬 전용)
+```bash
+.venv/bin/pytest tests/ -v
+```
+- `pytest + pytest-asyncio + httpx` 사용
+- MockLLM으로 OpenAI 비용 없이 회귀 검증
+- CI 없음 (로컬 전용 정책)
+
 ---
 
 ## 2. 현재 구현된 것
@@ -61,6 +69,7 @@ curl -X POST http://127.0.0.1:8765/chat \
   1. 모든 걸 풀스택 구현하지 않는다. **AI 특화 주제는 깊게**, 일반 웹 백엔드 주제(인증, 배포, 시크릿 매니징)는 **개념만**.
   2. 각 Phase 끝에 **"왜 이렇게 했는가 / 트레이드오프" 문서**를 남긴다 → 면접 대비 자료가 된다.
   3. 측정 없는 최적화는 의미 없다. **숫자(토큰 절감률, 정답률, 지연 시간)** 를 함께 남긴다.
+  4. **로컬 전용**. 클라우드 배포·CI/CD는 안 한다 (개념·문서만). 모든 실행/검증은 로컬 머신.
 
 ### Phase별 우선순위 (면접 ROI 기준 재배치)
 
@@ -81,6 +90,7 @@ curl -X POST http://127.0.0.1:8765/chat \
 | 단계 | 내용 | 상태 |
 |---|---|---|
 | 1.1 | OpenAILLM/MockLLM/ReActAgent에 async 메서드 추가, `main.py`에 `POST /chat` JSON 엔드포인트 | ✅ 완료 (2026-05-03) |
+| 1.1.t | Phase 1.1 회귀 테스트 셋 (pytest + pytest-asyncio + TestClient + MockLLM, 11 tests) | ✅ 완료 (2026-05-03) |
 | 1.2 | SSE 스트리밍 (`GET /chat/stream`, 스텝/토큰 모드 쿼리 파라미터) | ⏳ 대기 |
 | 1.3 | 영속화 (sqlite + sqlalchemy async, `users`/`conversations`/`messages` 최소 스키마) — postgres/alembic까진 안 감 | ⏳ 대기 |
 | 1.4 | Streamlit을 FastAPI 클라이언트로 전환 (httpx 호출), 동기 잔재 정리 | ⏳ 대기 |
@@ -114,9 +124,9 @@ curl -X POST http://127.0.0.1:8765/chat \
 ### Phase 4 — Eval 파이프라인
 - 골든셋 30~50개 (질문 + 기대 도구 사용 패턴 + 정답)
 - 메트릭: 정답률, 평균 스텝 수, 평균 토큰, 도구 선택 정확도
-- pytest로 자동 실행 + GitHub Actions CI
+- pytest로 로컬 실행 (CI 없음 — 로컬 한정 정책)
 - LLM-as-judge 한 종류는 직접 구현 (정답률 평가)
-- 산출물: **회귀 시 머지 차단되는 CI 스크린샷 + 메트릭 대시보드**
+- 산출물: **로컬 pytest 결과 리포트 + 메트릭 비교표**
 
 ### Phase 5 — RAG 트랙
 - 인덱싱: chunking 전략 2~3가지 비교 (고정 크기 / 의미 단위 / sliding window)
@@ -146,13 +156,14 @@ curl -X POST http://127.0.0.1:8765/chat \
 - **MCP (Model Context Protocol) 실험**: 기존 tool 1개를 MCP 서버로 분리, agent가 런타임에 디스커버리 — "MCP 써봤어요" 면접 답변 자료
 - 산출물: **MCP 도입 전후 아키텍처 다이어그램 + 권한·격리 관점 비교 문서**
 
-### Phase X — 일반 웹 주제 (구현 X, 문서만)
-포트폴리오/면접에서 "이건 알지만 의식적으로 안 했다"고 말할 수 있게 정리.
+### Phase X — 일반 웹/인프라 주제 (구현 X, 문서만)
+포트폴리오/면접에서 "이건 알지만 의식적으로 안 했다"고 말할 수 있게 정리. **로컬 전용 정책으로 실배포·CI/CD는 진행 안 함**.
 
 - Dockerfile 1회 작성 (빌드만, 실배포 X)
 - JWT 인증 흐름 다이어그램 + 코드 스켈레톤
 - 시크릿 매니저 (Vault/Secrets Manager) 패턴
 - Cloud Run/ECS 배포 흐름
+- CI/CD (GitHub Actions, GitLab CI 등) — 개념·예시 yaml만 정리
 
 ---
 
@@ -171,6 +182,10 @@ curl -X POST http://127.0.0.1:8765/chat \
 ### 2026-05-03 — DB는 sqlite로 시작
 - **결정**: Phase 1.3에서 postgres/alembic 대신 sqlite + sqlalchemy async.
 - **이유**: 면접용 데모 목적엔 충분. postgres 마이그레이션은 "필요 시 이렇게 한다"로 문서만.
+
+### 2026-05-03 — 로컬 전용, CI/CD·실배포 제외
+- **결정**: 모든 실행·검증을 로컬에서만 수행. GitHub Actions·Cloud Run·ECS·k8s 등 **클라우드/CI 인프라는 도입 X**. 관련 주제는 Phase X에 개념·예시 yaml만 정리.
+- **이유**: 면접 대비 학습 프로젝트라는 본질에 맞춰 인프라 비용·복잡도 절감. AI 특화 주제 깊이에 시간 집중. CI 부재로 인한 회귀 리스크는 로컬 pytest로 완화.
 
 ### 2026-05-03 — Tool 아키텍처 단계적 진화
 - **결정**:

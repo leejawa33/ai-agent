@@ -1,6 +1,20 @@
 class MockLLM:
+    def __init__(self, scenario: str = "default"):
+        self.scenario = scenario
+
     def call(self, messages, tools=None) -> dict:
         last = messages[-1].get("content") or ""
+
+        if self.scenario == "never_final":
+            return {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [{
+                    "id": "mock_call_loop",
+                    "type": "function",
+                    "function": {"name": "calculator", "arguments": '{"expression": "1+1"}'}
+                }]
+            }
 
         if "계산" in last:
             return {
