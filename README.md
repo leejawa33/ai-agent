@@ -24,12 +24,20 @@ USE_MOCK_LLM=1 .venv/bin/uvicorn main:app --port 8765
 
 ### 호출 예시
 ```bash
-# 일반 JSON 응답
+# 일반 JSON 응답 (응답에 conversation_id 포함)
 curl -X POST http://127.0.0.1:8765/chat \
   -H "Content-Type: application/json" \
   -d '{"message":"12 곱하기 3 더하기 4는?","max_steps":5}'
 
-# SSE 스트리밍 - 스텝 모드 (기본)
+# 같은 대화에 이어서 (이전 conversation_id 사용)
+curl -X POST http://127.0.0.1:8765/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"방금 결과를 두 배 해줘","conversation_id":1}'
+
+# 대화 조회
+curl http://127.0.0.1:8765/conversations/1
+
+# SSE 스트리밍 - 스텝 모드 (기본, 첫 이벤트로 conversation_id 송신)
 curl -N -X POST "http://127.0.0.1:8765/chat/stream?mode=step" \
   -H "Content-Type: application/json" \
   -d '{"message":"계산해줘"}'
@@ -107,7 +115,7 @@ curl -N -X POST "http://127.0.0.1:8765/chat/stream?mode=token" \
 | 1.1 | OpenAILLM/MockLLM/ReActAgent에 async 메서드 추가, `main.py`에 `POST /chat` JSON 엔드포인트 | ✅ 완료 (2026-05-03) |
 | 1.1.t | Phase 1.1 회귀 테스트 셋 (pytest + pytest-asyncio + TestClient + MockLLM, 11 tests) | ✅ 완료 (2026-05-03) |
 | 1.2 | SSE 스트리밍 (`POST /chat/stream?mode=step\|token`, 명명 이벤트, error/done 처리) | ✅ 완료 (2026-05-05) |
-| 1.3 | 영속화 (sqlite + sqlalchemy async, `users`/`conversations`/`messages` 최소 스키마) — postgres/alembic까진 안 감 | ⏳ 대기 |
+| 1.3 | 영속화 (sqlite + sqlalchemy async, `conversations`/`messages` 스키마, conversation_id 컨텍스트 로딩, `GET /conversations/{id}`) | ✅ 완료 (2026-05-05) |
 | 1.4 | Streamlit을 FastAPI 클라이언트로 전환 (httpx 호출), 동기 잔재 정리 | ⏳ 대기 |
 | 1.5 | **Tool 등록 자동화** — `@tool` 데코레이터 + Pydantic args 모델로 schema 자동 생성, `tools/` 폴더 자동 디스커버리 (수동 dict 등록 제거) | ⏳ 대기 |
 

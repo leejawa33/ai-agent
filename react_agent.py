@@ -22,8 +22,8 @@ class ReActAgent:
         self.system_prompt = system_prompt
         self.tools_schema = [t.schema for t in tools.values()] + [FINAL_ANSWER_SCHEMA]
 
-    def run(self, user_input: str, max_steps: int = 5):
-        messages = self._init_messages(user_input)
+    def run(self, user_input: str, max_steps: int = 5, history: list | None = None):
+        messages = self._init_messages(user_input, history)
         steps = []
         for step in range(1, max_steps + 1):
             message = self.llm.call(messages, self.tools_schema)
@@ -34,8 +34,8 @@ class ReActAgent:
             self._append_tool_result(messages, message, step_log["observation"], step_log["tool_call_id"])
         raise Exception("Max steps exceeded")
 
-    def run_step_stream(self, user_input: str, max_steps: int = 5):
-        messages = self._init_messages(user_input)
+    def run_step_stream(self, user_input: str, max_steps: int = 5, history: list | None = None):
+        messages = self._init_messages(user_input, history)
         for step in range(1, max_steps + 1):
             message = self.llm.call(messages, self.tools_schema)
             step_log = self._process_message(step, message)
@@ -45,8 +45,8 @@ class ReActAgent:
             self._append_tool_result(messages, message, step_log["observation"], step_log["tool_call_id"])
         raise Exception("Max steps exceeded")
 
-    def run_token_stream(self, user_input: str, max_steps: int = 5):
-        messages = self._init_messages(user_input)
+    def run_token_stream(self, user_input: str, max_steps: int = 5, history: list | None = None):
+        messages = self._init_messages(user_input, history)
         for step in range(1, max_steps + 1):
             yield ("step_start", step)
             message = None
@@ -63,8 +63,8 @@ class ReActAgent:
             self._append_tool_result(messages, message, step_log["observation"], step_log["tool_call_id"])
         raise Exception("Max steps exceeded")
 
-    async def arun(self, user_input: str, max_steps: int = 5):
-        messages = self._init_messages(user_input)
+    async def arun(self, user_input: str, max_steps: int = 5, history: list | None = None):
+        messages = self._init_messages(user_input, history)
         steps = []
         for step in range(1, max_steps + 1):
             message = await self.llm.acall(messages, self.tools_schema)
@@ -75,8 +75,8 @@ class ReActAgent:
             self._append_tool_result(messages, message, step_log["observation"], step_log["tool_call_id"])
         raise Exception("Max steps exceeded")
 
-    async def arun_step_stream(self, user_input: str, max_steps: int = 5):
-        messages = self._init_messages(user_input)
+    async def arun_step_stream(self, user_input: str, max_steps: int = 5, history: list | None = None):
+        messages = self._init_messages(user_input, history)
         for step in range(1, max_steps + 1):
             message = await self.llm.acall(messages, self.tools_schema)
             step_log = self._process_message(step, message)
@@ -86,8 +86,8 @@ class ReActAgent:
             self._append_tool_result(messages, message, step_log["observation"], step_log["tool_call_id"])
         raise Exception("Max steps exceeded")
 
-    async def arun_token_stream(self, user_input: str, max_steps: int = 5):
-        messages = self._init_messages(user_input)
+    async def arun_token_stream(self, user_input: str, max_steps: int = 5, history: list | None = None):
+        messages = self._init_messages(user_input, history)
         for step in range(1, max_steps + 1):
             yield ("step_start", step)
             message = None
@@ -104,11 +104,12 @@ class ReActAgent:
             self._append_tool_result(messages, message, step_log["observation"], step_log["tool_call_id"])
         raise Exception("Max steps exceeded")
 
-    def _init_messages(self, user_input: str):
-        return [
-            {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": user_input},
-        ]
+    def _init_messages(self, user_input: str, history: list | None = None):
+        msgs = [{"role": "system", "content": self.system_prompt}]
+        if history:
+            msgs.extend(history)
+        msgs.append({"role": "user", "content": user_input})
+        return msgs
 
     def _process_message(self, step: int, message: dict) -> dict:
         step_log = {
