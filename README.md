@@ -123,6 +123,7 @@ curl -N -X POST "http://127.0.0.1:8765/chat/stream?mode=token" \
 - [ ] `parallel_tool_calls=True` 적용, `_process_message`도 모든 tool_calls 순회하도록 수정 → Before/After 토큰 수
 - [ ] OpenAI Prompt Caching 활성화 (시스템+도구 스키마가 1024 토큰 넘는지 확인) → `cached_tokens` 비율
 - [ ] 도구 결과 길이 캡 + 2차 요약 패스 (mini로 wiki 결과 압축) → 절감률 vs 품질 트레이드오프
+- [ ] **Record & Replay 도입** (`pytest-recording` / `vcrpy`) — 실제 OpenAI 호출 1회 녹화 후 cassette로 재생. 비용 0, 결정론적. 프롬프트/모델 변경 시만 재녹화.
 
 코드 한 번 구현 (★★):
 - [ ] 메시지 히스토리 슬라이딩 윈도우 + LLM 요약 압축
@@ -136,12 +137,15 @@ curl -N -X POST "http://127.0.0.1:8765/chat/stream?mode=token" \
 
 산출물: **`docs/token-optimization.md`** (적용한 기법 + 숫자 + 회피한 기법과 이유)
 
-### Phase 4 — Eval 파이프라인
-- 골든셋 30~50개 (질문 + 기대 도구 사용 패턴 + 정답)
+### Phase 4 — Eval 파이프라인 (실제 LLM 품질 검증)
+**Mock 테스트가 못 잡는 영역** — 프롬프트 품질, 도구 선택 정확도, 모델 업그레이드 영향, 할루시네이션, 종료 조건 — 을 실제 LLM 호출로 검증.
+
+- 골든셋 30~50개 (`evals/golden_set.yaml`: 질문 + 기대 도구 사용 패턴 + 정답)
 - 메트릭: 정답률, 평균 스텝 수, 평균 토큰, 도구 선택 정확도
-- pytest로 로컬 실행 (CI 없음 — 로컬 한정 정책)
-- LLM-as-judge 한 종류는 직접 구현 (정답률 평가)
-- 산출물: **로컬 pytest 결과 리포트 + 메트릭 비교표**
+- `pytest -m eval`로 명시적 실행 (평소 mock 테스트와 분리, opt-in 플래그)
+- LLM-as-judge 한 종류는 직접 구현 (정답률 평가용 채점 LLM)
+- 비용: gpt-4o-mini로 1회 전체 실행 1000원 미만 목표
+- 산출물: **로컬 pytest 결과 리포트 + 메트릭 비교표 (모델/프롬프트 버전별)**
 
 ### Phase 5 — RAG 트랙
 - 인덱싱: chunking 전략 2~3가지 비교 (고정 크기 / 의미 단위 / sliding window)
@@ -201,6 +205,13 @@ curl -N -X POST "http://127.0.0.1:8765/chat/stream?mode=token" \
 ### 2026-05-03 — 로컬 전용, CI/CD·실배포 제외
 - **결정**: 모든 실행·검증을 로컬에서만 수행. GitHub Actions·Cloud Run·ECS·k8s 등 **클라우드/CI 인프라는 도입 X**. 관련 주제는 Phase X에 개념·예시 yaml만 정리.
 - **이유**: 면접 대비 학습 프로젝트라는 본질에 맞춰 인프라 비용·복잡도 절감. AI 특화 주제 깊이에 시간 집중. CI 부재로 인한 회귀 리스크는 로컬 pytest로 완화.
+
+### 2026-05-05 — LLM 테스트 3층 전략 (Mock / Replay / Real LLM)
+- **결정**: 테스트를 3층으로 분리.
+  1. **Mock 테스트** (현재 16개) — 코드/계약/구조 회귀. 매 변경마다 실행. 비용 0. → `pytest tests/`
+  2. **Record & Replay** (Phase 3에 도입) — 실제 OpenAI 응답 1회 녹화 후 cassette로 재생. 결정론적, 비용 0. 프롬프트 변경 시만 재녹화.
+  3. **Real LLM Eval** (Phase 4 본업) — 골든셋 30~50개로 모델/프롬프트 품질 검증. `pytest -m eval` opt-in. 1회 1000원 미만.
+- **이유**: Mock 테스트만으로는 프롬프트 품질·도구 선택 정확도·모델 업그레이드 영향을 못 잡음. 매번 실제 LLM 호출은 비용·flakiness 부담. 산업 표준 피라미드(단위 70 / 통합 25 / E2E 5) 적용. 면접에서 가장 자주 묻는 LLM 테스트 전략.
 
 ### 2026-05-03 — Tool 아키텍처 단계적 진화
 - **결정**:
