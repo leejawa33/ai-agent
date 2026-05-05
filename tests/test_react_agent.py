@@ -54,10 +54,3 @@ async def test_arun_token_stream_emits_expected_event_types():
     assert final_payload == "Mock LLM 응답입니다."
 
 
-def test_sync_run_still_works():
-    """Streamlit이 1.4까지 동기 경로를 사용하므로 회귀 보호."""
-    agent = make_agent()
-    answer, steps = agent.run("계산해줘")
-    assert len(steps) == 2
-    assert steps[-1]["action"] == "final"
-    assert answer == "Mock LLM 응답입니다."

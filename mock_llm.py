@@ -2,7 +2,7 @@ class MockLLM:
     def __init__(self, scenario: str = "default"):
         self.scenario = scenario
 
-    def call(self, messages, tools=None) -> dict:
+    def _build_response(self, messages) -> dict:
         last = messages[-1].get("content") or ""
 
         if self.scenario == "never_final":
@@ -37,18 +37,11 @@ class MockLLM:
             }]
         }
 
-    def stream_call(self, messages, tools=None):
-        result = self.call(messages, tools)
-        if result.get("tool_calls"):
-            args = result["tool_calls"][0]["function"]["arguments"]
-            yield ("tool_token", args)
-        yield ("done", result)
-
     async def acall(self, messages, tools=None) -> dict:
-        return self.call(messages, tools)
+        return self._build_response(messages)
 
     async def astream_call(self, messages, tools=None):
-        result = self.call(messages, tools)
+        result = self._build_response(messages)
         if result.get("tool_calls"):
             args = result["tool_calls"][0]["function"]["arguments"]
             yield ("tool_token", args)
