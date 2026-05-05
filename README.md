@@ -75,22 +75,94 @@ curl -N -X POST "http://127.0.0.1:8765/chat/stream?mode=token" \
 ## 2. 현재 구현된 것
 
 ### Agent 구조 (`react_agent.py`)
-- ReAct 루프: `LLM(생각) → tool 선택 → 실행 → 관찰 → 반복 → final_answer`
+- ReAct 루프: `LLM(생각) → tool 선택 → 실행(병렬 가능) → 관찰 → 반복 → final_answer`
 - OpenAI Function Calling 기반 (정규식 파싱 X)
-- 동기/비동기 메서드 병존: `run`/`arun`, `run_step_stream`/`arun_step_stream`, `run_token_stream`/`arun_token_stream`
+- async 전용 (`arun`/`arun_step_stream`/`arun_token_stream`)
+- `parallel_tool_calls=True` — 한 step에 여러 tool_call 동시 실행, `step_log["tools"]` 리스트
+- 멀티턴 컨텍스트: `arun(history=...)` 로 과거 user/assistant 메시지 주입
+- 모든 메서드에 `recorder` 인자 — observability 전파
 
 ### LLM 어댑터 (`llm.py`, `mock_llm.py`)
-- `OpenAILLM`: `OpenAI` + `AsyncOpenAI` 양쪽 지원
-- `MockLLM`: API 호출 없이 동작 검증용
+- `OpenAILLM`: `AsyncOpenAI` 기반, OpenAI usage(`prompt_tokens`/`completion_tokens`/`cached_tokens`) 자동 추출 → recorder 기록
+- `MockLLM`: API 호출 없이 동작 검증용. `scenario` 파라미터로 분기 (`default`/`never_final`/`parallel_tools`)
 
 ### Tool (`tools/`)
-- `CalculatorTool` — 수학 연산
-- `CurrentTimeTool` — 현재 시간
-- `WikipediaSearchTool` — 위키피디아 요약 조회
+- `@tool` 데코레이터 + Pydantic args 모델로 schema 자동 생성 (`tools/base.py`)
+- `tools/*_tool.py` 자동 디스커버리 → `from tools import TOOLS`
+- 등록된 도구: `calculator` / `current_time` / `wikipedia_search`
+- `WIKI_MAX_CHARS` 환경변수로 wiki 결과 길이 캡 조정
 
-### UI / API
-- `streamlit_app.py` — 스텝/토큰 스트리밍 모드 데모 UI
-- `main.py` — FastAPI `/chat` 엔드포인트
+### Persistence (`db.py`, `models.py`)
+- SQLite + SQLAlchemy 2.0 async + `aiosqlite`
+- 스키마: `conversations(id, title, created_at)` + `messages(id, conversation_id, role, content, created_at)`
+- `app.lifespan`에서 `init_db()` (별도 마이그레이션 도구 X)
+
+### Observability (`observability.py`)
+- Langfuse SDK + 자체 JSONL 폴백 로거 (이중 트랙)
+- `TraceRecorder`: LLM/Tool 이벤트 누적, finalize 시 `traces.jsonl` + Langfuse 동시 송신
+- `MODEL_PRICING` 단가 테이블로 비용 자동 계산
+- Langfuse 키 미설정 시 자동 no-op (폴백만 동작)
+
+### API (`main.py`)
+- `POST /chat` — JSON 응답 (answer + steps + conversation_id)
+- `POST /chat/stream?mode=step|token` — SSE (sse-starlette, 명명 이벤트)
+- `GET /conversations/{id}` — 대화 + 메시지 조회
+- `GET /traces/{conversation_id}` — 로컬 JSONL trace 조회
+
+### UI (`streamlit_app.py`)
+- FastAPI 클라이언트 (httpx + httpx-sse), 직접 LLM 호출 X
+- `API_BASE_URL` 환경변수 (기본 `http://127.0.0.1:8765`)
+- 사이드바에 conversation_id + "새 대화 시작" 버튼
+
+---
+
+## 2.5 기술 스택 인벤토리
+
+| 라이브러리 | 버전 | 용도 | 왜 이걸 골랐나 |
+|---|---|---|---|
+| `fastapi` | 0.128.0 | HTTP 백엔드 | async 네이티브, 자동 OpenAPI/Swagger UI, Pydantic 통합 |
+| `uvicorn` | 0.40.0 | ASGI 서버 | FastAPI 표준 |
+| `pydantic` | 2.12.5 | 입력 검증, tool args schema 자동 생성 | OpenAI Function Calling JSON Schema와 1:1 매핑, Pydantic-settings 연계 |
+| `pydantic-settings` | 2.12.0 | 환경변수 → 설정 객체 | (현재 직접 활용 적지만 의존성 유지) |
+| `openai` | 2.16.0 | LLM 호출 | 공식 SDK, async 지원, function calling 표준 |
+| `python-dotenv` | (자동) | `.env` 로드 | 로컬 개발 표준 |
+| `sse-starlette` | 3.4.1 | `EventSourceResponse` (SSE) | FastAPI 친화적, 비동기 generator → 명명 이벤트 자동 변환 |
+| `httpx` + `httpx-sse` | 0.28.1 / 0.4.3 | Streamlit이 백엔드 호출 + SSE 파싱 | requests보다 modern, `connect_sse()` 한 줄로 SSE 처리 |
+| `sqlalchemy[asyncio]` | 2.0.49 | ORM + async 세션 | 2.0 async 표준, 다른 DB로 갈아타기 쉬움 |
+| `aiosqlite` | 0.22.1 | sqlite async 드라이버 | 별도 서버 불필요(파일 1개), 학습/면접 데모에 적합 |
+| `langfuse` | 4.5.1 | LLM 관측성 SaaS SDK | 산업 표준 trace 트리 + 비용/토큰 가시화. 키 없으면 자동 no-op |
+| `pytest` + `pytest-asyncio` | 9.0.3 / 1.3.0 | 테스트 러너 | Python 표준, async 함수 직접 테스트 |
+| `pytest-recording` + `vcrpy` | 0.13.4 / 8.1.1 | Record & Replay (LLM 호출 cassette) | 실제 OpenAI 1회 녹화 → 이후 결정론적 회귀, 비용 0 |
+| `streamlit` | 1.53.1 | 데모 UI | 빠른 데모, Phase 1.4부터 백엔드와 분리 |
+| `requests` | 2.32.5 | wiki API 호출 (도구 내부) | 동기 호출 1개라 httpx 불필요 |
+
+**의식적으로 도입 X**:
+- LangChain 풀스택 — 추상화 무겁고 버전 호환 불안정 (ADR 2026-05-03 참조)
+- LangGraph — Phase 7 멀티 에이전트에서만 비교 검토
+- LlamaIndex — Phase 5 RAG에서 인덱서만 부분 도입 검토
+- alembic — Phase X에 개념만, sqlite + create_all로 충분
+- Postgres / Redis / Docker 배포 — Phase X 문서만, 로컬 전용 정책
+
+---
+
+## 2.6 Phase별 핵심 결정 요약 (한 줄씩)
+
+| Phase | 무엇을 했나 | 핵심 결정 / WHY | 의식적으로 안 한 것 |
+|---|---|---|---|
+| **1.1** | async 전환 + `POST /chat` | sync→async 양쪽 병존(임시), Streamlit 호환 위해 sync 유지 | 풀 마이그레이션은 1.4에서 |
+| **1.1.t** | pytest + TestClient 회귀 셋 | mock으로 코드 회귀만 잡음 (3층 테스트 전략의 1층) | 실제 LLM 통합은 Phase 4 |
+| **1.2** | SSE `POST /chat/stream` | POST 채택 (긴 메시지·body 확장성 — OpenAI 표준 따름) | EventSource API 호환은 안 챙김 (어차피 Streamlit이 httpx 씀) |
+| **1.3** | sqlite 영속화 + 멀티턴 | 단순 채팅 컨텍스트는 DB, 도구 trace는 별도(Langfuse) — 책임 분리 | users 테이블 X (단일 익명), tool_calls 테이블 X (Phase 6) |
+| **1.4** | Streamlit→httpx + 동기 일괄 제거 | 백엔드/프론트 분리 위반 시 빨간불 뜨는 스모크 테스트 추가 | Streamlit AppTest UI 자동화 (ROI 낮음) |
+| **1.5** | `@tool` 데코레이터 + Pydantic 자동 schema | tool 추가 시 등록 코드 0줄. 동시에 `next(iter(args))` 인자 매핑 버그 수정 | 서브셋 라우팅(도구 N개 적음), MCP(Phase 8) |
+| **2** | Langfuse + 자체 JSONL 이중 트랙 | 외부 SaaS 의존 옵셔널 + 폴백 자체 로거. 수동 instrumenting(자동 `@observe()` X) — "왜 했는지" 설명력 | OpenTelemetry, Sentry, prompt 버저닝 |
+| **3** | parallel_tool_calls + step_log 스키마 변경 + cached_tokens 측정 + cassette 인프라 | 측정 기반 최적화. **prompt caching은 임계 미달(850/1024)로 미발동 확인** → 트레이드오프 분석. cassette로 회귀 비용 0 | Wiki 2차 요약(구조 변경 큼), 히스토리 압축(Phase 6), 모델 라우팅(Phase 7), Semantic Cache |
+| **4** | (다음) Eval 파이프라인 | 골든셋 + LLM-as-judge + opt-in 실행 (`pytest -m eval`) | — |
+| **5** | (예정) RAG | chunking·hybrid·rerank 비교 측정 | — |
+| **6** | (예정) Memory + Hallucination | 슬라이딩 윈도우, 압축 요약, citation 강제 | — |
+| **7** | (예정) Multi-agent | Plan-and-Execute vs ReAct 비교, LangGraph 실험 | — |
+| **8** | (예정) Guardrails + MCP | 도구 1개 MCP 서버로 분리 실험 | — |
+| **X** | (문서만) Docker/JWT/CI/Cloud | 개념·예시 yaml만 (로컬 전용 정책) | 실배포 |
 
 ---
 
@@ -248,6 +320,14 @@ curl -N -X POST "http://127.0.0.1:8765/chat/stream?mode=token" \
   2. **Record & Replay** (Phase 3에 도입) — 실제 OpenAI 응답 1회 녹화 후 cassette로 재생. 결정론적, 비용 0. 프롬프트 변경 시만 재녹화.
   3. **Real LLM Eval** (Phase 4 본업) — 골든셋 30~50개로 모델/프롬프트 품질 검증. `pytest -m eval` opt-in. 1회 1000원 미만.
 - **이유**: Mock 테스트만으로는 프롬프트 품질·도구 선택 정확도·모델 업그레이드 영향을 못 잡음. 매번 실제 LLM 호출은 비용·flakiness 부담. 산업 표준 피라미드(단위 70 / 통합 25 / E2E 5) 적용. 면접에서 가장 자주 묻는 LLM 테스트 전략.
+
+### 2026-05-03 — async/FastAPI 백엔드 분리 (Phase 1.1)
+- **결정**: 모든 LLM 호출/agent 루프를 async로 통일하고 FastAPI `POST /chat`을 진입점으로. 동기 코드는 1.4까지 Streamlit 호환 유지 후 일괄 제거.
+- **이유**: ① 멀티 동시 요청 처리(I/O bound LLM/RAG/도구), ② Phase 2 Langfuse `@observe`/recorder가 async 친화적, ③ Phase 5 RAG 검색 동시성 활용. Streamlit은 sync 환경이라 1.4까지 두 경로 병존이 불가피.
+
+### 2026-05-03 — 영속화 정책: 채팅 컨텍스트와 도구 trace를 분리 저장 (Phase 1.3)
+- **결정**: DB(`messages`)에는 user/assistant 본문만 저장. 도구 호출/관찰/thought 같은 중간 step은 DB 저장 X — observability(Langfuse + traces.jsonl)로만 보냄.
+- **이유**: ① 책임 분리(채팅 재현 ≠ 운영 관측), ② 메시지 테이블이 가벼워서 컨텍스트 재구성 빠름, ③ trace는 시간 지나면 폐기/요약하지만 채팅은 영구 보관 — 라이프사이클이 다름. Phase 6에서 audit 필요해지면 별도 테이블 추가.
 
 ### 2026-05-03 — Tool 아키텍처 단계적 진화
 - **결정**:
