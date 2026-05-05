@@ -180,10 +180,10 @@ curl -N -X POST "http://127.0.0.1:8765/chat/stream?mode=token" \
 
 | Phase | 주제 | 면접 빈도 | 상태 |
 |---|---|---|---|
-| **1** | FastAPI/async 백엔드 분리 + SSE 스트리밍 + 간단 영속화 | ★★ | 진행 중 |
-| **2** | Observability (Langfuse) + 비용·토큰 측정 인프라 | ★★★ | 대기 |
-| **3** | **토큰·비용 최적화 (측정 기반)** | ★★★ | 대기 |
-| **4** | **Eval 파이프라인 (골든셋 + LLM-as-judge + 회귀)** | ★★★ | 대기 |
+| **1** | FastAPI/async 백엔드 분리 + SSE 스트리밍 + 간단 영속화 + Tool 데코레이터 | ★★ | ✅ 완료 (2026-05-05) |
+| **2** | Observability (Langfuse + 폴백 JSONL) + 비용·토큰 측정 인프라 | ★★★ | ✅ 완료 (2026-05-05) |
+| **3** | **토큰·비용 최적화 + Record & Replay (측정 기반)** | ★★★ | ✅ 완료 (2026-05-05) |
+| **4** | **Eval 파이프라인 (골든셋 + LLM-as-judge + opt-in 실행)** | ★★★ | ⏳ 진행 중 |
 | **5** | **RAG 트랙 (chunking·하이브리드 검색·리랭킹·eval)** | ★★★ | 대기 |
 | **6** | Memory + Hallucination 대응 (citation, grounding) | ★★ | 대기 |
 | **7** | Multi-agent / Plan-and-Execute / LangGraph 비교 | ★★ | 대기 |
