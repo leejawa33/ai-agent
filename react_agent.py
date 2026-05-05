@@ -94,9 +94,8 @@ class ReActAgent:
             step_log["action"] = "tool"
             step_log["tool"] = tool_name
             step_log["tool_call_id"] = tc["id"]
-            tool_input = next(iter(args.values()), "") if args else ""
             tool = self.tools.get(tool_name)
-            step_log["observation"] = tool.run(str(tool_input)) if tool else "Tool not found"
+            step_log["observation"] = tool.run(args) if tool else "Tool not found"
         else:
             step_log["action"] = "final"
             step_log["final"] = message.get("content") or ""

@@ -16,19 +16,12 @@ from mock_llm import MockLLM
 from models import Conversation, Message
 from prompt import SYSTEM_PROMPT
 from react_agent import ReActAgent
-from tools.caculator_tool import CalculatorTool
-from tools.current_time_tool import CurrentTimeTool
-from tools.wikipedia_search_tool import WikipediaSearchTool
+from tools import TOOLS
 
 
 def build_agent() -> ReActAgent:
     llm = MockLLM() if os.getenv("USE_MOCK_LLM") == "1" else OpenAILLM()
-    tools = {
-        "calculator": CalculatorTool(),
-        "current_time": CurrentTimeTool(),
-        "wikipedia_search": WikipediaSearchTool(),
-    }
-    return ReActAgent(llm=llm, tools=tools, system_prompt=SYSTEM_PROMPT)
+    return ReActAgent(llm=llm, tools=TOOLS, system_prompt=SYSTEM_PROMPT)
 
 
 @asynccontextmanager

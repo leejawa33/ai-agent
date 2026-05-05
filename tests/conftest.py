@@ -13,9 +13,7 @@ from mock_llm import MockLLM
 from models import Base
 from prompt import SYSTEM_PROMPT
 from react_agent import ReActAgent
-from tools.caculator_tool import CalculatorTool
-from tools.current_time_tool import CurrentTimeTool
-from tools.wikipedia_search_tool import WikipediaSearchTool
+from tools import TOOLS
 
 
 @pytest_asyncio.fixture
@@ -44,10 +42,6 @@ def client(test_session_factory):
 def make_agent(llm=None):
     return ReActAgent(
         llm=llm or MockLLM(),
-        tools={
-            "calculator": CalculatorTool(),
-            "current_time": CurrentTimeTool(),
-            "wikipedia_search": WikipediaSearchTool(),
-        },
+        tools=TOOLS,
         system_prompt=SYSTEM_PROMPT,
     )

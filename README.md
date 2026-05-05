@@ -124,7 +124,7 @@ curl -N -X POST "http://127.0.0.1:8765/chat/stream?mode=token" \
 | 1.2 | SSE 스트리밍 (`POST /chat/stream?mode=step\|token`, 명명 이벤트, error/done 처리) | ✅ 완료 (2026-05-05) |
 | 1.3 | 영속화 (sqlite + sqlalchemy async, `conversations`/`messages` 스키마, conversation_id 컨텍스트 로딩, `GET /conversations/{id}`) | ✅ 완료 (2026-05-05) |
 | 1.4 | Streamlit을 FastAPI 클라이언트로 전환 (httpx-sse), 동기 코드 일괄 제거 (`call`/`stream_call`/`run`/`run_step_stream`/`run_token_stream`) | ✅ 완료 (2026-05-05) |
-| 1.5 | **Tool 등록 자동화** — `@tool` 데코레이터 + Pydantic args 모델로 schema 자동 생성, `tools/` 폴더 자동 디스커버리 (수동 dict 등록 제거) | ⏳ 대기 |
+| 1.5 | **Tool 등록 자동화** — `@tool` 데코레이터 + Pydantic args 모델로 schema 자동 생성, `tools/` 폴더 자동 디스커버리 (수동 dict 등록 제거), `_process_message` 인자 매핑 버그 동시 수정 | ✅ 완료 (2026-05-05) |
 
 ### Phase 2 — Observability + 측정 인프라
 - Langfuse 도입 (`@observe()` 데코레이터로 호출별/스텝별/도구별 trace)
@@ -249,5 +249,5 @@ curl -N -X POST "http://127.0.0.1:8765/chat/stream?mode=token" \
 ### 알려진 이슈
 - 복잡한 쿼리에서 LLM이 `final_answer` 호출 안 하고 max_steps 초과 가능 → Phase 6에서 프롬프트/루프 정책 개선 예정
 - `tools/caculator_tool.py` 파일명 오타 (calculator)
-- `react_agent.py:96` `next(iter(args.values()))` — 인자 순서 의존, 도구별 명시적 매핑 필요
-- `agent.log` `.gitignore` 미반영 (62KB 누적 중)
+- ~~`react_agent.py:96` `next(iter(args.values()))` — 인자 순서 의존, 도구별 명시적 매핑 필요~~ → **Phase 1.5에서 해결** (Pydantic 검증으로 dict 전달)
+- ~~`agent.log` `.gitignore` 미반영~~ → 1.3 이후 `*.log` 처리됨
