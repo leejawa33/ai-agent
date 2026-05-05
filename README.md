@@ -192,6 +192,8 @@ curl -N -X POST "http://127.0.0.1:8765/chat/stream?mode=token" \
 
 ### Phase 1 — 백엔드 분리 (세부)
 
+📚 **학습 자료**: [`docs/phase-1-review.md`](docs/phase-1-review.md) — sub-step별 한 일/WHY/핵심 코드/면접 Q&A 정리
+
 | 단계 | 내용 | 상태 |
 |---|---|---|
 | 1.1 | OpenAILLM/MockLLM/ReActAgent에 async 메서드 추가, `main.py`에 `POST /chat` JSON 엔드포인트 | ✅ 완료 (2026-05-03) |
