@@ -68,6 +68,7 @@ class TraceRecorder:
         input_tokens: int,
         output_tokens: int,
         latency_ms: float,
+        cached_tokens: int = 0,
         request_summary: dict | None = None,
         response_summary: Any | None = None,
     ) -> None:
@@ -77,6 +78,7 @@ class TraceRecorder:
             "model": model,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
+            "cached_tokens": cached_tokens,
             "cost_usd": cost,
             "latency_ms": round(latency_ms, 2),
         }
@@ -119,6 +121,7 @@ class TraceRecorder:
         self.status = status
         latency_ms = round((time.time() - self.start_time) * 1000, 2)
 
+        llm_events = [e for e in self.events if e["type"] == "llm"]
         record = {
             "trace_id": self.trace_id,
             "conversation_id": self.conversation_id,
@@ -126,9 +129,11 @@ class TraceRecorder:
             "answer": answer,
             "status": status,
             "latency_ms": latency_ms,
-            "total_input_tokens": sum(e.get("input_tokens", 0) for e in self.events if e["type"] == "llm"),
-            "total_output_tokens": sum(e.get("output_tokens", 0) for e in self.events if e["type"] == "llm"),
-            "total_cost_usd": round(sum(e.get("cost_usd", 0) for e in self.events if e["type"] == "llm"), 8),
+            "total_input_tokens": sum(e.get("input_tokens", 0) for e in llm_events),
+            "total_output_tokens": sum(e.get("output_tokens", 0) for e in llm_events),
+            "total_cached_tokens": sum(e.get("cached_tokens", 0) for e in llm_events),
+            "total_cost_usd": round(sum(e.get("cost_usd", 0) for e in llm_events), 8),
+            "llm_call_count": len(llm_events),
             "step_count": sum(1 for e in self.events if e["type"] == "tool") + 1,
             "events": self.events,
             "ts": time.time(),

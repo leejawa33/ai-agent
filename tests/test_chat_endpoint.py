@@ -13,9 +13,9 @@ def test_chat_uses_calculator_tool_for_math_query(client):
     response = client.post("/chat", json={"message": "계산해줘"})
     body = response.json()
     tool_steps = [s for s in body["steps"] if s["action"] == "tool"]
-    assert any(s["tool"] == "calculator" for s in tool_steps)
-    calc_step = next(s for s in tool_steps if s["tool"] == "calculator")
-    assert calc_step["observation"] == "40"
+    calc_entries = [t for s in tool_steps for t in s["tools"] if t["name"] == "calculator"]
+    assert calc_entries, "calculator 도구가 호출되지 않음"
+    assert calc_entries[0]["observation"] == "40"
 
 
 def test_chat_finalizes_immediately_for_simple_query(client):

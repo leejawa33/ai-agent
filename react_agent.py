@@ -31,7 +31,7 @@ class ReActAgent:
             steps.append(step_log)
             if step_log["action"] == "final":
                 return step_log["final"], steps
-            self._append_tool_result(messages, message, step_log["observation"], step_log["tool_call_id"])
+            self._append_tool_result(messages, message, step_log)
         raise Exception("Max steps exceeded")
 
     async def arun_step_stream(self, user_input: str, max_steps: int = 5, history: list | None = None, recorder=None):
@@ -42,7 +42,7 @@ class ReActAgent:
             yield step_log
             if step_log["action"] == "final":
                 return
-            self._append_tool_result(messages, message, step_log["observation"], step_log["tool_call_id"])
+            self._append_tool_result(messages, message, step_log)
         raise Exception("Max steps exceeded")
 
     async def arun_token_stream(self, user_input: str, max_steps: int = 5, history: list | None = None, recorder=None):
@@ -60,7 +60,7 @@ class ReActAgent:
             if step_log["action"] == "final":
                 yield ("final", step_log["final"])
                 return
-            self._append_tool_result(messages, message, step_log["observation"], step_log["tool_call_id"])
+            self._append_tool_result(messages, message, step_log)
         raise Exception("Max steps exceeded")
 
     def _init_messages(self, user_input: str, history: list | None = None):
@@ -75,36 +75,43 @@ class ReActAgent:
             "step": step,
             "thought": message.get("content") or "",
             "action": None,
-            "tool": None,
-            "tool_call_id": None,
-            "observation": None,
+            "tools": [],
             "final": None,
         }
         tool_calls = message.get("tool_calls")
-        if tool_calls:
-            tc = tool_calls[0]
-            tool_name = tc["function"]["name"]
-            args = json.loads(tc["function"]["arguments"]) if tc["function"]["arguments"] else {}
+        if not tool_calls:
+            step_log["action"] = "final"
+            step_log["final"] = message.get("content") or ""
+            return step_log
 
-            if tool_name == "final_answer":
+        # final_answer가 포함되어 있으면 final로 처리 (다른 tool_call 무시)
+        for tc in tool_calls:
+            if tc["function"]["name"] == "final_answer":
+                args = json.loads(tc["function"]["arguments"]) if tc["function"]["arguments"] else {}
                 step_log["action"] = "final"
                 step_log["final"] = args.get("answer", "")
                 return step_log
 
-            step_log["action"] = "tool"
-            step_log["tool"] = tool_name
-            step_log["tool_call_id"] = tc["id"]
+        # 일반 tool_call들을 모두 실행
+        step_log["action"] = "tool"
+        for tc in tool_calls:
+            tool_name = tc["function"]["name"]
+            args = json.loads(tc["function"]["arguments"]) if tc["function"]["arguments"] else {}
             tool = self.tools.get(tool_name)
-            step_log["observation"] = tool.run(args, recorder=recorder) if tool else "Tool not found"
-        else:
-            step_log["action"] = "final"
-            step_log["final"] = message.get("content") or ""
+            observation = tool.run(args, recorder=recorder) if tool else "Tool not found"
+            step_log["tools"].append({
+                "name": tool_name,
+                "args": args,
+                "tool_call_id": tc["id"],
+                "observation": observation,
+            })
         return step_log
 
-    def _append_tool_result(self, messages, message: dict, observation: str, tool_call_id: str):
+    def _append_tool_result(self, messages, message: dict, step_log: dict):
         messages.append(message)
-        messages.append({
-            "role": "tool",
-            "tool_call_id": tool_call_id,
-            "content": str(observation),
-        })
+        for tool_entry in step_log["tools"]:
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tool_entry["tool_call_id"],
+                "content": str(tool_entry["observation"]),
+            })

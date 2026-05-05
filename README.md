@@ -139,26 +139,27 @@ curl -N -X POST "http://127.0.0.1:8765/chat/stream?mode=token" \
 - 환경변수: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST` (모두 옵셔널)
 - 산출물: **"trace 한 건을 면접관에게 보여주며 설명할 수 있는 스크린샷 + 해석"** 문서 (Langfuse 가입 후 작성)
 
-### Phase 3 — 토큰·비용 최적화
-**Phase 2 완료 후 진행** (측정 없이는 최적화 의미 없음).
+### Phase 3 — 토큰·비용 최적화 ✅ 완료 (2026-05-05)
+
+**측정 결과 → `docs/token-optimization.md`**
 
 직접 구현 + 측정 (★★★):
-- [ ] `parallel_tool_calls=True` 적용, `_process_message`도 모든 tool_calls 순회하도록 수정 → Before/After 토큰 수
-- [ ] OpenAI Prompt Caching 활성화 (시스템+도구 스키마가 1024 토큰 넘는지 확인) → `cached_tokens` 비율
-- [ ] 도구 결과 길이 캡 + 2차 요약 패스 (mini로 wiki 결과 압축) → 절감률 vs 품질 트레이드오프
-- [ ] **Record & Replay 도입** (`pytest-recording` / `vcrpy`) — 실제 OpenAI 호출 1회 녹화 후 cassette로 재생. 비용 0, 결정론적. 프롬프트/모델 변경 시만 재녹화.
+- [x] `parallel_tool_calls=True` 적용, `_process_message` 모든 tool_calls 순회 + `step_log["tools"]` 리스트 스키마 변경
+- [x] `cached_tokens` 캡처(observability) + 시스템 프롬프트 강화 → **측정 결과: 프리픽스 850 토큰으로 1024 미달 → 캐시 미발동, 트레이드오프 분석 문서화**
+- [x] 도구 결과 길이 캡 (`WIKI_MAX_CHARS` 환경변수)
+- [x] **Record & Replay 도입** (`pytest-recording 0.13.4`, `vcrpy 8.1.1`) — Authorization 헤더 마스킹, `tests/cassettes/` 자동 관리
 
 코드 한 번 구현 (★★):
-- [ ] 메시지 히스토리 슬라이딩 윈도우 + LLM 요약 압축
-- [ ] 모델 라우팅 (도구 선택은 mini, 최종 답변은 4o)
+- [ ] 메시지 히스토리 슬라이딩 윈도우 + LLM 요약 압축 → Phase 6 Memory에서 본격
+- [ ] 모델 라우팅 (도구 선택은 mini, 최종 답변은 4o) → Phase 7 Multi-agent에서
 
-개념 정리만 (★):
+개념 정리만 (★) — `docs/token-optimization.md` "의식적으로 안 한 것" 섹션:
 - Semantic Cache (GPTCache) — 일관성/정확도 트레이드오프
 - Plan-and-Execute로 LLM 호출 횟수 절감 (Phase 7과 중복)
 - Batch API 50% 할인 — chat agent 부적합 이유 정리
 - 도구 서브셋 라우팅 — 도구 N개 적을 땐 불필요
 
-산출물: **`docs/token-optimization.md`** (적용한 기법 + 숫자 + 회피한 기법과 이유)
+**1회 측정 비용**: ≈ $0.0015 (5쿼리 × 2 round)
 
 ### Phase 4 — Eval 파이프라인 (실제 LLM 품질 검증)
 **Mock 테스트가 못 잡는 영역** — 프롬프트 품질, 도구 선택 정확도, 모델 업그레이드 영향, 할루시네이션, 종료 조건 — 을 실제 LLM 호출로 검증.
@@ -228,6 +229,10 @@ curl -N -X POST "http://127.0.0.1:8765/chat/stream?mode=token" \
 ### 2026-05-03 — 로컬 전용, CI/CD·실배포 제외
 - **결정**: 모든 실행·검증을 로컬에서만 수행. GitHub Actions·Cloud Run·ECS·k8s 등 **클라우드/CI 인프라는 도입 X**. 관련 주제는 Phase X에 개념·예시 yaml만 정리.
 - **이유**: 면접 대비 학습 프로젝트라는 본질에 맞춰 인프라 비용·복잡도 절감. AI 특화 주제 깊이에 시간 집중. CI 부재로 인한 회귀 리스크는 로컬 pytest로 완화.
+
+### 2026-05-05 — Phase 3 step_log 스키마 변경 (parallel_tool_calls 지원)
+- **결정**: `step_log["tool"]` / `step_log["observation"]` / `step_log["tool_call_id"]` (단일) → `step_log["tools"]: list[{name, args, tool_call_id, observation}]` (멀티)로 breaking change.
+- **이유**: `parallel_tool_calls=True` 활성화 시 한 LLM 응답이 여러 tool_call을 반환할 수 있음. 단일 필드 유지 시 첫 항목 외 호출 결과 손실 + Streamlit/SSE 동시 수정 → 호환성 임시 유지보다 일괄 변경이 깔끔. `final_answer` 포함 시 다른 tool_call 무시(final 우선).
 
 ### 2026-05-05 — Observability: Langfuse + 폴백 JSONL 로거 (이중 트랙)
 - **결정**: Langfuse SDK 통합 + 자체 `traces.jsonl` 로거를 동시에 운영. `LANGFUSE_PUBLIC_KEY` 미설정 시 Langfuse는 no-op, 로컬 JSONL은 항상 동작. instrumenting은 OpenAI/MockLLM/ToolWrapper에 명시적 `recorder` 인자 전파(자동 데코레이터 X).

@@ -31,16 +31,21 @@ class OpenAILLM:
             messages=messages,
             tools=tools,
             temperature=0,
-            parallel_tool_calls=False,
+            parallel_tool_calls=True,
         )
         latency_ms = (time.time() - t0) * 1000
         result = self._to_dict(res.choices[0].message)
         if recorder is not None and res.usage is not None:
+            cached = 0
+            details = getattr(res.usage, "prompt_tokens_details", None)
+            if details is not None:
+                cached = getattr(details, "cached_tokens", 0) or 0
             recorder.record_llm(
                 model=OPENAI_MODEL,
                 input_tokens=res.usage.prompt_tokens,
                 output_tokens=res.usage.completion_tokens,
                 latency_ms=latency_ms,
+                cached_tokens=cached,
                 request_summary={"messages_count": len(messages), "tools_count": len(tools)},
                 response_summary=result,
             )
@@ -56,7 +61,7 @@ class OpenAILLM:
             tools=tools,
             temperature=0,
             stream=True,
-            parallel_tool_calls=False,
+            parallel_tool_calls=True,
             stream_options={"include_usage": True},
         )
         full_content = ""
@@ -104,11 +109,16 @@ class OpenAILLM:
         logger.debug("◀ RESPONSE (stream)\n%s", json.dumps(result, ensure_ascii=False, indent=2))
         if recorder is not None and usage is not None:
             latency_ms = (time.time() - t0) * 1000
+            cached = 0
+            details = getattr(usage, "prompt_tokens_details", None)
+            if details is not None:
+                cached = getattr(details, "cached_tokens", 0) or 0
             recorder.record_llm(
                 model=OPENAI_MODEL,
                 input_tokens=usage.prompt_tokens,
                 output_tokens=usage.completion_tokens,
                 latency_ms=latency_ms,
+                cached_tokens=cached,
                 request_summary={"messages_count": len(messages), "tools_count": len(tools), "stream": True},
                 response_summary=result,
             )

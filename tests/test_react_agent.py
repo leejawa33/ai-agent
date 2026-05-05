@@ -9,8 +9,9 @@ async def test_arun_calculator_query_uses_tool_then_finalizes():
     answer, steps = await agent.arun("계산해줘")
     assert len(steps) == 2
     assert steps[0]["action"] == "tool"
-    assert steps[0]["tool"] == "calculator"
-    assert steps[0]["observation"] == "40"
+    assert len(steps[0]["tools"]) == 1
+    assert steps[0]["tools"][0]["name"] == "calculator"
+    assert steps[0]["tools"][0]["observation"] == "40"
     assert steps[1]["action"] == "final"
     assert answer == "Mock LLM 응답입니다."
 
@@ -36,7 +37,21 @@ async def test_arun_step_stream_yields_each_step():
         steps.append(step_log)
     assert len(steps) == 2
     assert steps[0]["action"] == "tool"
+    assert steps[0]["tools"][0]["name"] == "calculator"
     assert steps[-1]["action"] == "final"
+
+
+async def test_arun_handles_parallel_tool_calls_in_one_step():
+    """parallel_tool_calls=True 활성화 후 한 LLM 호출이 여러 tool_call을 반환하면 모두 실행되는지."""
+    agent = make_agent(llm=MockLLM(scenario="parallel_tools"))
+    answer, steps = await agent.arun("뭐든")
+
+    assert len(steps) == 2
+    assert steps[0]["action"] == "tool"
+    names = [t["name"] for t in steps[0]["tools"]]
+    assert names == ["calculator", "current_time"]
+    assert steps[0]["tools"][0]["observation"] == "4"
+    assert steps[1]["action"] == "final"
 
 
 async def test_arun_token_stream_emits_expected_event_types():

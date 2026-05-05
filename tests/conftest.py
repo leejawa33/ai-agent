@@ -36,6 +36,20 @@ def isolated_traces_file(tmp_path, monkeypatch):
     yield traces_path
 
 
+@pytest.fixture(scope="session")
+def vcr_config():
+    """pytest-recording 전역 설정. API 키 마스킹 + JSON 본문 비교."""
+    return {
+        "filter_headers": [
+            ("authorization", "Bearer REDACTED"),
+            ("openai-organization", "REDACTED"),
+            ("x-request-id", "REDACTED"),
+        ],
+        "decode_compressed_response": True,
+        "match_on": ["method", "scheme", "host", "port", "path", "query", "body"],
+    }
+
+
 @pytest.fixture
 def client(test_session_factory):
     async def override_get_session():

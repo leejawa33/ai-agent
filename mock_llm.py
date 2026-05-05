@@ -16,6 +16,28 @@ class MockLLM:
                 }]
             }
 
+        if self.scenario == "parallel_tools":
+            # 첫 호출: calculator + current_time을 한 번에 → 두 번째 호출: final
+            already_ran = any(m.get("role") == "tool" for m in messages)
+            if not already_ran:
+                return {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {"id": "mock_par_1", "type": "function",
+                         "function": {"name": "calculator", "arguments": '{"expression": "2+2"}'}},
+                        {"id": "mock_par_2", "type": "function",
+                         "function": {"name": "current_time", "arguments": "{}"}},
+                    ],
+                }
+            return {
+                "role": "assistant", "content": None,
+                "tool_calls": [{
+                    "id": "mock_call_final", "type": "function",
+                    "function": {"name": "final_answer", "arguments": '{"answer": "Mock LLM 응답입니다."}'}
+                }]
+            }
+
         if "계산" in last:
             return {
                 "role": "assistant",

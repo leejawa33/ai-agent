@@ -1,9 +1,13 @@
+import os
 from urllib.parse import quote
 
 import requests
 from pydantic import BaseModel, Field
 
 from .base import tool
+
+# 환경변수로 결과 길이 캡 조정 가능 (Phase 3 토큰 최적화)
+WIKI_MAX_CHARS = int(os.getenv("WIKI_MAX_CHARS", "500"))
 
 
 class WikipediaSearchArgs(BaseModel):
@@ -26,6 +30,6 @@ def wikipedia_search(query: str) -> str:
         if not extract:
             return "ERROR: 요약 정보를 가져오지 못했습니다."
 
-        return extract[:500]
+        return extract[:WIKI_MAX_CHARS]
     except Exception as e:
         return f"ERROR: wikipedia request failed ({e})"

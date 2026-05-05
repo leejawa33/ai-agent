@@ -47,13 +47,18 @@ def stream_events(message: str, mode_param: str):
 
 
 def render_step_log(s: dict, expanded: bool):
-    label = f"Step {s['step']} — {'최종 답변' if s['action'] == 'final' else 'tool: ' + str(s['tool'])}"
+    if s["action"] == "final":
+        label = f"Step {s['step']} — 최종 답변"
+    else:
+        tool_names = ", ".join(t["name"] for t in s.get("tools", []))
+        label = f"Step {s['step']} — tools: {tool_names}"
     with st.expander(label, expanded=expanded):
         if s.get("thought"):
             st.write("**Thought:**", s["thought"])
-        if s.get("tool"):
-            st.write("**Tool:**", s["tool"])
-            st.write("**Observation:**", s.get("observation"))
+        for t in s.get("tools", []):
+            st.write(f"**Tool:** `{t['name']}`")
+            st.write("**Args:**", t.get("args"))
+            st.write("**Observation:**", t.get("observation"))
         if s.get("final"):
             st.success(s["final"])
 
