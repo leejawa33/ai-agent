@@ -1,3 +1,4 @@
+import time
 from typing import Callable
 
 from pydantic import BaseModel
@@ -37,11 +38,16 @@ class ToolWrapper:
             },
         }
 
-    def run(self, args: dict) -> str:
+    def run(self, args: dict, recorder=None) -> str:
+        t0 = time.time()
         if self.args_model is None:
-            return str(self.func())
-        validated = self.args_model(**args)
-        return str(self.func(**validated.model_dump()))
+            result = str(self.func())
+        else:
+            validated = self.args_model(**args)
+            result = str(self.func(**validated.model_dump()))
+        if recorder is not None:
+            recorder.record_tool(self.name, args, result, (time.time() - t0) * 1000)
+        return result
 
 
 def tool(args_model: type[BaseModel] | None = None, *, description: str | None = None, name: str | None = None):

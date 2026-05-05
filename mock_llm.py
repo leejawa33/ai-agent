@@ -37,12 +37,31 @@ class MockLLM:
             }]
         }
 
-    async def acall(self, messages, tools=None) -> dict:
-        return self._build_response(messages)
+    async def acall(self, messages, tools=None, recorder=None) -> dict:
+        result = self._build_response(messages)
+        if recorder is not None:
+            recorder.record_llm(
+                model="mock",
+                input_tokens=10 * len(messages),
+                output_tokens=5,
+                latency_ms=0.0,
+                request_summary={"messages_count": len(messages)},
+                response_summary=result,
+            )
+        return result
 
-    async def astream_call(self, messages, tools=None):
+    async def astream_call(self, messages, tools=None, recorder=None):
         result = self._build_response(messages)
         if result.get("tool_calls"):
             args = result["tool_calls"][0]["function"]["arguments"]
             yield ("tool_token", args)
+        if recorder is not None:
+            recorder.record_llm(
+                model="mock",
+                input_tokens=10 * len(messages),
+                output_tokens=5,
+                latency_ms=0.0,
+                request_summary={"messages_count": len(messages), "stream": True},
+                response_summary=result,
+            )
         yield ("done", result)

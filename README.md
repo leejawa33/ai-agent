@@ -44,6 +44,9 @@ curl -X POST http://127.0.0.1:8765/chat \
 # 대화 조회
 curl http://127.0.0.1:8765/conversations/1
 
+# Trace 조회 (로컬 JSONL — Langfuse 없어도 동작)
+curl http://127.0.0.1:8765/traces/1
+
 # SSE 스트리밍 - 스텝 모드 (기본, 첫 이벤트로 conversation_id 송신)
 curl -N -X POST "http://127.0.0.1:8765/chat/stream?mode=step" \
   -H "Content-Type: application/json" \
@@ -126,10 +129,15 @@ curl -N -X POST "http://127.0.0.1:8765/chat/stream?mode=token" \
 | 1.4 | Streamlit을 FastAPI 클라이언트로 전환 (httpx-sse), 동기 코드 일괄 제거 (`call`/`stream_call`/`run`/`run_step_stream`/`run_token_stream`) | ✅ 완료 (2026-05-05) |
 | 1.5 | **Tool 등록 자동화** — `@tool` 데코레이터 + Pydantic args 모델로 schema 자동 생성, `tools/` 폴더 자동 디스커버리 (수동 dict 등록 제거), `_process_message` 인자 매핑 버그 동시 수정 | ✅ 완료 (2026-05-05) |
 
-### Phase 2 — Observability + 측정 인프라
-- Langfuse 도입 (`@observe()` 데코레이터로 호출별/스텝별/도구별 trace)
-- 비용·토큰 가시화 (모델 단가 테이블 포함)
-- 산출물: **"trace 한 건을 면접관에게 보여주며 설명할 수 있는 스크린샷 + 해석"** 문서
+### Phase 2 — Observability + 측정 인프라 ✅ 완료 (2026-05-05)
+- Langfuse SDK 통합 + **자체 JSONL 폴백 로거** (Langfuse 키 없으면 자동 no-op, 폴백만 동작)
+- 모델 단가 테이블(`MODEL_PRICING`)로 비용 자동 계산 (`gpt-4o-mini`/`gpt-4o`/`gpt-4.1-mini`/`mock`)
+- `TraceRecorder`로 LLM/Tool 이벤트 누적, `trace_chat()` context manager로 한 채팅 = 한 trace
+- **수동 instrumenting**: `acall`/`astream_call`이 `recorder.record_llm()` 호출, `ToolWrapper.run`이 `recorder.record_tool()` 호출
+- `GET /traces/{conversation_id}` — 로컬 JSONL에서 trace 조회 (Langfuse는 자체 UI 사용)
+- 의존성: `langfuse 4.5.1`
+- 환경변수: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST` (모두 옵셔널)
+- 산출물: **"trace 한 건을 면접관에게 보여주며 설명할 수 있는 스크린샷 + 해석"** 문서 (Langfuse 가입 후 작성)
 
 ### Phase 3 — 토큰·비용 최적화
 **Phase 2 완료 후 진행** (측정 없이는 최적화 의미 없음).
@@ -220,6 +228,14 @@ curl -N -X POST "http://127.0.0.1:8765/chat/stream?mode=token" \
 ### 2026-05-03 — 로컬 전용, CI/CD·실배포 제외
 - **결정**: 모든 실행·검증을 로컬에서만 수행. GitHub Actions·Cloud Run·ECS·k8s 등 **클라우드/CI 인프라는 도입 X**. 관련 주제는 Phase X에 개념·예시 yaml만 정리.
 - **이유**: 면접 대비 학습 프로젝트라는 본질에 맞춰 인프라 비용·복잡도 절감. AI 특화 주제 깊이에 시간 집중. CI 부재로 인한 회귀 리스크는 로컬 pytest로 완화.
+
+### 2026-05-05 — Observability: Langfuse + 폴백 JSONL 로거 (이중 트랙)
+- **결정**: Langfuse SDK 통합 + 자체 `traces.jsonl` 로거를 동시에 운영. `LANGFUSE_PUBLIC_KEY` 미설정 시 Langfuse는 no-op, 로컬 JSONL은 항상 동작. instrumenting은 OpenAI/MockLLM/ToolWrapper에 명시적 `recorder` 인자 전파(자동 데코레이터 X).
+- **이유**:
+  1. 사용자가 Langfuse 가입 안 해도 즉시 메트릭 확보 → 학습 흐름 안 끊김
+  2. 외부 SaaS 의존을 옵셔널로 만드는 추상화 능력 시연 (면접 답변 자료)
+  3. 명시적 instrumenting이 "왜 했는지" 한 줄씩 설명하기 쉬움 (`@observe()`는 자동화돼서 답변 약함)
+  4. JSONL은 Phase 4 eval에서 후처리·재현·분석에 그대로 활용 가능
 
 ### 2026-05-05 — LLM 테스트 3층 전략 (Mock / Replay / Real LLM)
 - **결정**: 테스트를 3층으로 분리.

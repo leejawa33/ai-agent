@@ -7,6 +7,7 @@ import pytest_asyncio
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+import observability
 from db import get_session
 from main import app
 from mock_llm import MockLLM
@@ -25,6 +26,14 @@ async def test_session_factory(tmp_path):
     factory = async_sessionmaker(engine, expire_on_commit=False)
     yield factory
     await engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def isolated_traces_file(tmp_path, monkeypatch):
+    """테스트마다 traces.jsonl을 격리해 파일 오염을 막는다."""
+    traces_path = tmp_path / "traces.jsonl"
+    monkeypatch.setattr(observability, "TRACES_FILE", traces_path)
+    yield traces_path
 
 
 @pytest.fixture

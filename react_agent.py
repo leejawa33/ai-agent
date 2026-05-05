@@ -22,40 +22,40 @@ class ReActAgent:
         self.system_prompt = system_prompt
         self.tools_schema = [t.schema for t in tools.values()] + [FINAL_ANSWER_SCHEMA]
 
-    async def arun(self, user_input: str, max_steps: int = 5, history: list | None = None):
+    async def arun(self, user_input: str, max_steps: int = 5, history: list | None = None, recorder=None):
         messages = self._init_messages(user_input, history)
         steps = []
         for step in range(1, max_steps + 1):
-            message = await self.llm.acall(messages, self.tools_schema)
-            step_log = self._process_message(step, message)
+            message = await self.llm.acall(messages, self.tools_schema, recorder=recorder)
+            step_log = self._process_message(step, message, recorder=recorder)
             steps.append(step_log)
             if step_log["action"] == "final":
                 return step_log["final"], steps
             self._append_tool_result(messages, message, step_log["observation"], step_log["tool_call_id"])
         raise Exception("Max steps exceeded")
 
-    async def arun_step_stream(self, user_input: str, max_steps: int = 5, history: list | None = None):
+    async def arun_step_stream(self, user_input: str, max_steps: int = 5, history: list | None = None, recorder=None):
         messages = self._init_messages(user_input, history)
         for step in range(1, max_steps + 1):
-            message = await self.llm.acall(messages, self.tools_schema)
-            step_log = self._process_message(step, message)
+            message = await self.llm.acall(messages, self.tools_schema, recorder=recorder)
+            step_log = self._process_message(step, message, recorder=recorder)
             yield step_log
             if step_log["action"] == "final":
                 return
             self._append_tool_result(messages, message, step_log["observation"], step_log["tool_call_id"])
         raise Exception("Max steps exceeded")
 
-    async def arun_token_stream(self, user_input: str, max_steps: int = 5, history: list | None = None):
+    async def arun_token_stream(self, user_input: str, max_steps: int = 5, history: list | None = None, recorder=None):
         messages = self._init_messages(user_input, history)
         for step in range(1, max_steps + 1):
             yield ("step_start", step)
             message = None
-            async for event_type, data in self.llm.astream_call(messages, self.tools_schema):
+            async for event_type, data in self.llm.astream_call(messages, self.tools_schema, recorder=recorder):
                 if event_type in ("token", "tool_token"):
                     yield ("token", data)
                 elif event_type == "done":
                     message = data
-            step_log = self._process_message(step, message)
+            step_log = self._process_message(step, message, recorder=recorder)
             yield ("step_done", step_log)
             if step_log["action"] == "final":
                 yield ("final", step_log["final"])
@@ -70,7 +70,7 @@ class ReActAgent:
         msgs.append({"role": "user", "content": user_input})
         return msgs
 
-    def _process_message(self, step: int, message: dict) -> dict:
+    def _process_message(self, step: int, message: dict, recorder=None) -> dict:
         step_log = {
             "step": step,
             "thought": message.get("content") or "",
@@ -95,7 +95,7 @@ class ReActAgent:
             step_log["tool"] = tool_name
             step_log["tool_call_id"] = tc["id"]
             tool = self.tools.get(tool_name)
-            step_log["observation"] = tool.run(args) if tool else "Tool not found"
+            step_log["observation"] = tool.run(args, recorder=recorder) if tool else "Tool not found"
         else:
             step_log["action"] = "final"
             step_log["final"] = message.get("content") or ""

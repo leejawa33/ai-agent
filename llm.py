@@ -1,10 +1,13 @@
 import os
 import json
 import logging
+import time
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
 load_dotenv()
+
+OPENAI_MODEL = "gpt-4o-mini"
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -20,33 +23,51 @@ class OpenAILLM:
     def __init__(self):
         self.aclient = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-    async def acall(self, messages, tools) -> dict:
+    async def acall(self, messages, tools, recorder=None) -> dict:
         logger.debug("▶ REQUEST\n%s", json.dumps(messages, ensure_ascii=False, indent=2))
+        t0 = time.time()
         res = await self.aclient.chat.completions.create(
-            model="gpt-4o-mini",
+            model=OPENAI_MODEL,
             messages=messages,
             tools=tools,
             temperature=0,
             parallel_tool_calls=False,
         )
+        latency_ms = (time.time() - t0) * 1000
         result = self._to_dict(res.choices[0].message)
+        if recorder is not None and res.usage is not None:
+            recorder.record_llm(
+                model=OPENAI_MODEL,
+                input_tokens=res.usage.prompt_tokens,
+                output_tokens=res.usage.completion_tokens,
+                latency_ms=latency_ms,
+                request_summary={"messages_count": len(messages), "tools_count": len(tools)},
+                response_summary=result,
+            )
         logger.debug("◀ RESPONSE\n%s", json.dumps(result, ensure_ascii=False, indent=2))
         return result
 
-    async def astream_call(self, messages, tools):
+    async def astream_call(self, messages, tools, recorder=None):
         logger.debug("▶ REQUEST (stream)\n%s", json.dumps(messages, ensure_ascii=False, indent=2))
+        t0 = time.time()
         stream = await self.aclient.chat.completions.create(
-            model="gpt-4o-mini",
+            model=OPENAI_MODEL,
             messages=messages,
             tools=tools,
             temperature=0,
             stream=True,
             parallel_tool_calls=False,
+            stream_options={"include_usage": True},
         )
         full_content = ""
         tool_calls_accum = {}
+        usage = None
 
         async for chunk in stream:
+            if chunk.usage is not None:
+                usage = chunk.usage
+            if not chunk.choices:
+                continue
             delta = chunk.choices[0].delta
 
             if delta.content:
@@ -81,6 +102,16 @@ class OpenAILLM:
             result = {"role": "assistant", "content": full_content, "tool_calls": None}
 
         logger.debug("◀ RESPONSE (stream)\n%s", json.dumps(result, ensure_ascii=False, indent=2))
+        if recorder is not None and usage is not None:
+            latency_ms = (time.time() - t0) * 1000
+            recorder.record_llm(
+                model=OPENAI_MODEL,
+                input_tokens=usage.prompt_tokens,
+                output_tokens=usage.completion_tokens,
+                latency_ms=latency_ms,
+                request_summary={"messages_count": len(messages), "tools_count": len(tools), "stream": True},
+                response_summary=result,
+            )
         yield ("done", result)
 
     def _to_dict(self, message) -> dict:

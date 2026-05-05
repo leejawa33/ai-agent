@@ -14,6 +14,7 @@ from db import get_session, init_db
 from llm import OpenAILLM
 from mock_llm import MockLLM
 from models import Conversation, Message
+from observability import read_traces_for_conversation, trace_chat
 from prompt import SYSTEM_PROMPT
 from react_agent import ReActAgent
 from tools import TOOLS
@@ -79,7 +80,11 @@ async def _load_or_create_conversation(
 async def chat(req: ChatRequest, session: AsyncSession = Depends(get_session)):
     conv, history = await _load_or_create_conversation(session, req.conversation_id, req.message)
 
-    answer, steps = await app.state.agent.arun(req.message, max_steps=req.max_steps, history=history)
+    with trace_chat(conv.id, req.message) as recorder:
+        answer, steps = await app.state.agent.arun(
+            req.message, max_steps=req.max_steps, history=history, recorder=recorder,
+        )
+        recorder.finalize(answer=answer, status="ok")
 
     session.add_all([
         Message(conversation_id=conv.id, role="user", content=req.message),
@@ -114,14 +119,19 @@ async def chat_stream(
     async def step_generator():
         yield _sse("conversation_id", {"conversation_id": conv_id})
         final_answer: str | None = None
-        try:
-            async for step_log in agent.arun_step_stream(req.message, max_steps=req.max_steps, history=history):
-                yield _sse("step", step_log)
-                if step_log["action"] == "final":
-                    final_answer = step_log["final"]
-                    yield _sse("final", {"answer": final_answer})
-        except Exception as e:
-            yield _sse("error", {"message": str(e)})
+        with trace_chat(conv_id, req.message) as recorder:
+            try:
+                async for step_log in agent.arun_step_stream(
+                    req.message, max_steps=req.max_steps, history=history, recorder=recorder,
+                ):
+                    yield _sse("step", step_log)
+                    if step_log["action"] == "final":
+                        final_answer = step_log["final"]
+                        yield _sse("final", {"answer": final_answer})
+                recorder.finalize(answer=final_answer, status="ok")
+            except Exception as e:
+                recorder.finalize(answer=None, status=f"error: {e}")
+                yield _sse("error", {"message": str(e)})
         if final_answer is not None:
             await persist(final_answer)
         yield _sse("done", {})
@@ -129,19 +139,24 @@ async def chat_stream(
     async def token_generator():
         yield _sse("conversation_id", {"conversation_id": conv_id})
         final_answer: str | None = None
-        try:
-            async for event_type, data in agent.arun_token_stream(req.message, max_steps=req.max_steps, history=history):
-                if event_type == "step_start":
-                    yield _sse("step_start", {"step": data})
-                elif event_type == "token":
-                    yield _sse("token", {"text": data})
-                elif event_type == "step_done":
-                    yield _sse("step_done", data)
-                elif event_type == "final":
-                    final_answer = data
-                    yield _sse("final", {"answer": final_answer})
-        except Exception as e:
-            yield _sse("error", {"message": str(e)})
+        with trace_chat(conv_id, req.message) as recorder:
+            try:
+                async for event_type, data in agent.arun_token_stream(
+                    req.message, max_steps=req.max_steps, history=history, recorder=recorder,
+                ):
+                    if event_type == "step_start":
+                        yield _sse("step_start", {"step": data})
+                    elif event_type == "token":
+                        yield _sse("token", {"text": data})
+                    elif event_type == "step_done":
+                        yield _sse("step_done", data)
+                    elif event_type == "final":
+                        final_answer = data
+                        yield _sse("final", {"answer": final_answer})
+                recorder.finalize(answer=final_answer, status="ok")
+            except Exception as e:
+                recorder.finalize(answer=None, status=f"error: {e}")
+                yield _sse("error", {"message": str(e)})
         if final_answer is not None:
             await persist(final_answer)
         yield _sse("done", {})
@@ -160,3 +175,9 @@ async def get_conversation(conversation_id: int, session: AsyncSession = Depends
         title=conv.title,
         messages=[MessageOut(id=m.id, role=m.role, content=m.content) for m in conv.messages],
     )
+
+
+@app.get("/traces/{conversation_id}")
+async def get_traces(conversation_id: int):
+    traces = read_traces_for_conversation(conversation_id)
+    return {"conversation_id": conversation_id, "count": len(traces), "traces": traces}
