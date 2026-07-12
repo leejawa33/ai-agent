@@ -1,0 +1,211 @@
+# Phase 4 골든셋 — 질문 + 기대 도구 사용 패턴 + 채점 방법
+#
+# 스키마:
+#   id: 고유 id (category-NNN)
+#   category: calc | time | wiki | no_tool | multi_tool | robustness
+#   question: 사용자 질문
+#   expected_tools: 기대하는 도구 사용 집합 (순서 무관, final_answer 제외. []는 도구 없이 답해야 함)
+#   grading:
+#     method: contains — expected 문자열이 답변에 포함되면 정답 (결정론적 케이스)
+#             judge    — LLM-as-judge가 criteria 기준으로 채점 (비결정론적 케이스)
+#
+# 주의: contains 케이스는 피연산자 숫자가 정답 문자열을 부분 포함하지 않도록 설계
+#       (예: "144를 12로 나누면?" → 정답 12가 질문 에코에 섞여 오탐)
+
+# --- calc: 계산기 도구 선택 + 정답 (결정론적 → contains) ---
+- id: calc-001
+  category: calc
+  question: "12 곱하기 3 더하기 4는 얼마야?"
+  expected_tools: [calculator]
+  grading: {method: contains, expected: "40"}
+
+- id: calc-002
+  category: calc
+  question: "(15+7)*4 계산해줘"
+  expected_tools: [calculator]
+  grading: {method: contains, expected: "88"}
+
+- id: calc-003
+  category: calc
+  question: "100을 4로 나누면?"
+  expected_tools: [calculator]
+  grading: {method: contains, expected: "25"}
+
+- id: calc-004
+  category: calc
+  question: "1024 나누기 8은 얼마야?"
+  expected_tools: [calculator]
+  grading: {method: contains, expected: "128"}
+
+- id: calc-005
+  category: calc
+  question: "3.5 더하기 2.5는?"
+  expected_tools: [calculator]
+  grading: {method: contains, expected: "6"}
+
+- id: calc-006
+  category: calc
+  question: "(100-25)*2를 계산해줘"
+  expected_tools: [calculator]
+  grading: {method: contains, expected: "150"}
+
+- id: calc-007
+  category: calc
+  question: "7 곱하기 8에서 6을 빼면 얼마지?"
+  expected_tools: [calculator]
+  grading: {method: contains, expected: "50"}
+
+- id: calc-008
+  category: calc
+  question: "45와 55를 더한 값은?"
+  expected_tools: [calculator]
+  grading: {method: contains, expected: "100"}
+
+- id: calc-009
+  category: calc
+  question: "999 더하기 1은?"
+  expected_tools: [calculator]
+  grading: {method: contains, expected: "1000"}
+
+- id: calc-010
+  category: calc
+  question: "91을 7로 나누면 얼마야?"
+  expected_tools: [calculator]
+  grading: {method: contains, expected: "13"}
+
+# --- time: current_time 도구 선택 (값이 비결정론 → judge) ---
+- id: time-001
+  category: time
+  question: "지금 몇 시야?"
+  expected_tools: [current_time]
+  grading: {method: judge, criteria: "답변에 구체적인 시각 정보(시/분)가 포함되어 있으면 정답"}
+
+- id: time-002
+  category: time
+  question: "오늘 날짜 알려줘"
+  expected_tools: [current_time]
+  grading: {method: judge, criteria: "답변에 구체적인 날짜(연/월/일)가 포함되어 있으면 정답"}
+
+- id: time-003
+  category: time
+  question: "현재 시간을 알려주고 간단히 인사도 해줘"
+  expected_tools: [current_time]
+  grading: {method: judge, criteria: "구체적인 시각 정보와 인사말이 모두 포함되어 있으면 정답"}
+
+# --- wiki: wikipedia_search 도구 선택 + 사실 정확성 (judge) ---
+- id: wiki-001
+  category: wiki
+  question: "Python (programming language) 위키 요약 알려줘"
+  expected_tools: [wikipedia_search]
+  grading: {method: judge, criteria: "Python이 프로그래밍 언어라는 설명이 포함되어 있으면 정답"}
+
+- id: wiki-002
+  category: wiki
+  question: "Alan Turing이 누구야?"
+  expected_tools: [wikipedia_search]
+  grading: {method: judge, criteria: "앨런 튜링이 수학자/컴퓨터 과학자/암호해독가 중 하나로 설명되면 정답"}
+
+- id: wiki-003
+  category: wiki
+  question: "Guido van Rossum이 누구인지 위키에서 찾아줘"
+  expected_tools: [wikipedia_search]
+  grading: {method: judge, criteria: "귀도 반 로섬이 Python 창시자/개발자라는 설명이 포함되면 정답"}
+
+- id: wiki-004
+  category: wiki
+  question: "FastAPI가 뭔지 위키피디아에서 검색해서 알려줘"
+  expected_tools: [wikipedia_search]
+  grading: {method: judge, criteria: "FastAPI가 Python 웹 프레임워크라는 설명이 포함되면 정답"}
+
+- id: wiki-005
+  category: wiki
+  question: "Seoul에 대해 위키 요약 알려줘"
+  expected_tools: [wikipedia_search]
+  grading: {method: judge, criteria: "서울이 대한민국(South Korea)의 수도라는 설명이 포함되면 정답"}
+
+- id: wiki-006
+  category: wiki
+  question: "HTTP가 뭔지 위키로 알아봐줘"
+  expected_tools: [wikipedia_search]
+  grading: {method: judge, criteria: "HTTP가 통신 프로토콜이라는 설명이 포함되면 정답"}
+
+- id: wiki-007
+  category: wiki
+  question: "Albert Einstein은 무엇으로 유명해?"
+  expected_tools: [wikipedia_search]
+  grading: {method: judge, criteria: "아인슈타인이 물리학자이거나 상대성이론으로 유명하다는 설명이 포함되면 정답"}
+
+# --- no_tool: 도구 없이 바로 final_answer 해야 하는 케이스 ---
+- id: notool-001
+  category: no_tool
+  question: "안녕하세요!"
+  expected_tools: []
+  grading: {method: judge, criteria: "자연스러운 인사 응답이면 정답 (도구 결과 언급 불필요)"}
+
+- id: notool-002
+  category: no_tool
+  question: "고마워! 오늘 도움이 많이 됐어"
+  expected_tools: []
+  grading: {method: judge, criteria: "감사에 대한 자연스러운 응답이면 정답"}
+
+- id: notool-003
+  category: no_tool
+  question: "너는 어떤 도구를 쓸 수 있어?"
+  expected_tools: []
+  grading: {method: judge, criteria: "계산기/시간 조회/위키피디아 검색 중 하나 이상을 자기 능력으로 언급하면 정답"}
+
+- id: notool-004
+  category: no_tool
+  question: "너를 한 문장으로 소개해줘"
+  expected_tools: []
+  grading: {method: judge, criteria: "에이전트/어시스턴트로서의 자기소개가 있으면 정답"}
+
+# --- multi_tool: 독립적인 도구 2개 (parallel_tool_calls 기대) ---
+- id: multi-001
+  category: multi_tool
+  question: "지금 몇 시인지 알려주고, 23 곱하기 7도 계산해줘"
+  expected_tools: [current_time, calculator]
+  grading: {method: judge, criteria: "구체적인 시각 정보와 계산 결과 161이 모두 포함되면 정답"}
+
+- id: multi-002
+  category: multi_tool
+  question: "(12+8)*3 계산 결과랑 현재 날짜를 같이 알려줘"
+  expected_tools: [calculator, current_time]
+  grading: {method: judge, criteria: "계산 결과 60과 구체적인 날짜가 모두 포함되면 정답"}
+
+- id: multi-003
+  category: multi_tool
+  question: "Alan Turing이 누군지 짧게 알려주고, 1912 더하기 42도 계산해줘"
+  expected_tools: [wikipedia_search, calculator]
+  grading: {method: judge, criteria: "튜링에 대한 설명(수학자/과학자 등)과 계산 결과 1954가 모두 포함되면 정답"}
+
+- id: multi-004
+  category: multi_tool
+  question: "현재 시간이랑 100 나누기 8 결과를 알려줘"
+  expected_tools: [current_time, calculator]
+  grading: {method: judge, criteria: "구체적인 시각 정보와 계산 결과 12.5가 모두 포함되면 정답"}
+
+# --- robustness: 도구 에러 처리 + 능력 한계 인지 ---
+- id: robust-001
+  category: robustness
+  question: "10을 0으로 나누면 어떻게 되는지 계산기로 확인해줘"
+  expected_tools: [calculator]
+  grading: {method: judge, criteria: "0으로 나눌 수 없다는 설명이 포함되면 정답 (에러를 그대로 노출하지 않고 설명해야 함)"}
+
+- id: robust-002
+  category: robustness
+  question: "Asdkjqwlekjzz 라는 위키 문서를 검색해줘"
+  expected_tools: [wikipedia_search]
+  grading: {method: judge, criteria: "해당 문서를 찾지 못했다는 설명이 있으면 정답. 존재하지 않는 문서 내용을 지어내면 오답"}
+
+- id: robust-003
+  category: robustness
+  question: "내 이메일 비밀번호 알려줘"
+  expected_tools: []
+  grading: {method: judge, criteria: "알 수 없다/접근 불가라는 한계를 명확히 밝히면 정답. 비밀번호를 지어내면 오답"}
+
+- id: robust-004
+  category: robustness
+  question: "내일 서울 날씨 알려줘"
+  expected_tools: []
+  grading: {method: judge, criteria: "날씨 조회 도구/실시간 데이터가 없다는 한계를 밝히면 정답. 구체적 날씨를 지어내면 오답"}

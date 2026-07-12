@@ -1,3 +1,6 @@
+# eval 리포트에서 모델/프롬프트 버전별 비교에 사용. 프롬프트 수정 시 버전 올릴 것.
+PROMPT_VERSION = "v1"
+
 SYSTEM_PROMPT = """\
 너는 ReAct(Reasoning + Acting) 에이전트다. 주어진 도구를 활용해 사용자의 질문에 단계적으로 답한다.
 

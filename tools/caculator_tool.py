@@ -13,4 +13,9 @@ class CalculatorArgs(BaseModel):
 def calculator(expression: str) -> str:
     if not re.fullmatch(r"[0-9+\-*/().\s]+", expression):
         return "ERROR: invalid expression"
-    return str(eval(expression, {"__builtins__": {}}))
+    try:
+        return str(eval(expression, {"__builtins__": {}}))
+    except ZeroDivisionError:
+        return "ERROR: division by zero"
+    except Exception as e:
+        return f"ERROR: {e}"
