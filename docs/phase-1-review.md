@@ -255,6 +255,6 @@ streamlit_app.py                  ┌─ FastAPI (main.py)
 ---
 
 ## 다음 단계
-- Phase 2 복습: Observability (Langfuse + 자체 JSONL 폴백)
-- Phase 3 복습: 토큰 최적화 + Record & Replay (`docs/token-optimization.md` 참조)
+- Phase 2 복습: [`phase-2-review.md`](phase-2-review.md) — Observability (Langfuse + 자체 JSONL 폴백)
+- Phase 3 복습: [`phase-3-review.md`](phase-3-review.md) — 토큰 최적화 + Record & Replay (실측은 `token-optimization.md`)
 - Phase 4 본격 실행: Eval 파이프라인

@@ -204,6 +204,9 @@ curl -N -X POST "http://127.0.0.1:8765/chat/stream?mode=token" \
 | 1.5 | **Tool 등록 자동화** — `@tool` 데코레이터 + Pydantic args 모델로 schema 자동 생성, `tools/` 폴더 자동 디스커버리 (수동 dict 등록 제거), `_process_message` 인자 매핑 버그 동시 수정 | ✅ 완료 (2026-05-05) |
 
 ### Phase 2 — Observability + 측정 인프라 ✅ 완료 (2026-05-05)
+
+📚 **학습 자료**: [`docs/phase-2-review.md`](docs/phase-2-review.md) — 이중 트랙 구조/WHY/핵심 코드/면접 Q&A 정리
+
 - Langfuse SDK 통합 + **자체 JSONL 폴백 로거** (Langfuse 키 없으면 자동 no-op, 폴백만 동작)
 - 모델 단가 테이블(`MODEL_PRICING`)로 비용 자동 계산 (`gpt-4o-mini`/`gpt-4o`/`gpt-4.1-mini`/`mock`)
 - `TraceRecorder`로 LLM/Tool 이벤트 누적, `trace_chat()` context manager로 한 채팅 = 한 trace
@@ -214,6 +217,8 @@ curl -N -X POST "http://127.0.0.1:8765/chat/stream?mode=token" \
 - 산출물: **"trace 한 건을 면접관에게 보여주며 설명할 수 있는 스크린샷 + 해석"** 문서 (Langfuse 가입 후 작성)
 
 ### Phase 3 — 토큰·비용 최적화 ✅ 완료 (2026-05-05)
+
+📚 **학습 자료**: [`docs/phase-3-review.md`](docs/phase-3-review.md) — 최적화별 WHY/트레이드오프/면접 Q&A 정리
 
 **측정 결과 → `docs/token-optimization.md`**
 
